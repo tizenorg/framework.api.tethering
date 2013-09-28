@@ -42,6 +42,8 @@ make %{?jobs:-j%jobs}
 
 %install
 %make_install
+mkdir -p %{buildroot}/usr/share/license
+cp LICENSE.APLv2.0 %{buildroot}/usr/share/license/%{name}
 
 %post -p /sbin/ldconfig
 
@@ -51,6 +53,7 @@ make %{?jobs:-j%jobs}
 %manifest capi-network-tethering.manifest
 %defattr(-,root,root,-)
 %{_libdir}/*.so.*
+/usr/share/license/%{name}
 %ifarch %{arm}
 /etc/config/connectivity/sysinfo-tethering.xml
 %else
