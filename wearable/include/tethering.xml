@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<!DOCTYPE node PUBLIC
+	"-//freedesktop//DTD D-Bus Object Introspection 1.0//EN"
+	"http://standards.freedesktop.org/dbus/1.0/introspect.dtd">
+
+<node>
+	<interface name="org.tizen.tethering">
+
+		<!-- Method definitions -->
+
+		<method name="disable">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="enable_wifi_tethering">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="s" name="ssid" direction="in"/>
+			<arg type="s" name="key" direction="in"/>
+			<arg type="i" name="visibility" direction="in"/>
+			<arg type="i" name="security" direction="in"/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="disable_wifi_tethering">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="enable_bt_tethering">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="disable_bt_tethering">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="enable_usb_tethering">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="disable_usb_tethering">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="enable_wifi_ap">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="s" name="ssid" direction="in"/>
+			<arg type="s" name="key" direction="in"/>
+			<arg type="i" name="visibility" direction="in"/>
+			<arg type="i" name="security" direction="in"/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="disable_wifi_ap">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="reload_wifi_settings">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="s" name="ssid" direction="in"/>
+			<arg type="s" name="key" direction="in"/>
+			<arg type="i" name="visibility" direction="in"/>
+			<arg type="i" name="security" direction="in"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="reload_wifi_ap_settings">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="s" name="ssid" direction="in"/>
+			<arg type="s" name="key" direction="in"/>
+			<arg type="i" name="visibility" direction="in"/>
+			<arg type="i" name="security" direction="in"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="get_station_info">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="a(usssu)" name="station" direction="out"/>
+		</method>
+
+		<method name="get_data_packet_usage">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="t" name="rx_data" direction="out"/>
+			<arg type="t" name="tx_data" direction="out"/>
+		</method>
+
+		<!-- Signal (D-Bus) definitions -->
+		<signal name="net_closed">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="sta_connected">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="sta_disconnected">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="wifi_on">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="wifi_off">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="usb_on">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="usb_off">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="bluetooth_on">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="bluetooth_off">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="wifi_ap_on">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="wifi_ap_off">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="no_data_timeout">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="low_batt_mode">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="flight_mode">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="power_save_mode">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+	</interface>
+</node>

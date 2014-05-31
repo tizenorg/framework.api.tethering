@@ -1,0 +1,25 @@
+capi-network-tethering (0.0.3-1) unstable; urgency=low
+
+  * Deprecated API from Glib2-2.32.3 is replaced with new one
+  * Git: slp/api/tethering
+  * Tag: capi-network-tethering_0.0.3-1
+
+ -- Seungyoun Ju <sy39.ju@samsung.com>  Fri, 15 Jun 2012 14:30:39 +0900
+
+capi-network-tethering (0.0.1-2) unstable; urgency=low
+
+  * Getting USB Interface API is implemented
+    Use of handle for getting client information is implemented
+    Some API's prototypes are changed
+   * Git: slp/api/tethering
+   * Tag: capi-network-tethering_0.0.1-2
+
+ -- Seungyoun Ju <sy39.ju@samsung.com>  Thu, 31 May 2012 13:54:34 +0900
+
+capi-network-tethering (0.0.1-1) unstable; urgency=low
+
+   * Initial upload
+   * Git: slp/api/tethering
+   * Tag: capi-network-tethering_0.0.1-1
+
+ -- Seungyoun Ju <sy39.ju@samsung.com>  Thu, 29 Mar 2012 10:33:07 +0900
