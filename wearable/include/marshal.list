@@ -1,3 +1,0 @@
-# DBUS Signal argument converting list
-VOID:STRING,UINT,STRING,STRING,STRING,UINT
-

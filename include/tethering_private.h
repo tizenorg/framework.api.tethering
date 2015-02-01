@@ -21,6 +21,7 @@
 
 #include <glib.h>
 #include <dbus/dbus-glib.h>
+#include <dbus/dbus-glib-lowlevel.h>
 #include <dlog.h>
 
 #include "tethering.h"
@@ -34,12 +35,14 @@ extern "C" {
 #endif
 
 #ifndef DEPRECATED_API
-#  define DEPRECATED_API __attribute__ ((deprecated))
+#define DEPRECATED_API __attribute__ ((deprecated))
 #endif
 
-#define DBG(fmt, args...) LOGD(fmt, ##args)
-#define WARN(fmt, args...) LOGW(fmt, ##args)
-#define ERR(fmt, args...) LOGE(fmt, ##args)
+#define DBG(fmt, args...)	LOGD(fmt, ##args)
+#define WARN(fmt, args...)	LOGW(fmt, ##args)
+#define ERR(fmt, args...)	LOGE(fmt, ##args)
+#define SDBG(fmt, args...)	SECURE_LOGD(fmt, ##args)
+#define SERR(fmt, args...)	SECURE_LOGE(fmt, ##args)
 
 #define _warn_if(expr, fmt, arg...) do { \
 		if (expr) { \
@@ -86,9 +89,8 @@ extern "C" {
 /**
 * Common configuration
 */
-#define TETHERING_TYPE_MAX		4	/**< All, USB, Wi-Fi, BT */
+#define TETHERING_TYPE_MAX		5	/**< All, USB, Wi-Fi, BT, Wi-Fi AP */
 #define TETHERING_STR_INFO_LEN		20	/**< length of the ip or mac address */
-#define TETHERING_STR_HOSTNAME_LEN	32	/**< length of the hostname */
 
 /**
 * Mobile AP error code
@@ -105,6 +107,7 @@ typedef enum {
 	MOBILE_AP_ERROR_DHCP,			/**< DHCP error */
 	MOBILE_AP_ERROR_IN_PROGRESS,		/**< Request is in progress */
 	MOBILE_AP_ERROR_NOT_PERMITTED,		/**< Operation is not permitted */
+	MOBILE_AP_ERROR_PERMISSION_DENIED,  /**< Permission Denied */
 
 	MOBILE_AP_ERROR_MAX
 } mobile_ap_error_code_e;
@@ -126,6 +129,9 @@ typedef enum {
 	MOBILE_AP_ENABLE_BT_TETHERING_CFM,
 	MOBILE_AP_DISABLE_BT_TETHERING_CFM,
 
+	MOBILE_AP_ENABLE_WIFI_AP_CFM,
+	MOBILE_AP_DISABLE_WIFI_AP_CFM,
+
 	MOBILE_AP_GET_STATION_INFO_CFM,
 	MOBILE_AP_GET_DATA_PACKET_USAGE_CFM
 } mobile_ap_event_e;
@@ -134,6 +140,7 @@ typedef enum {
 	MOBILE_AP_TYPE_WIFI,
 	MOBILE_AP_TYPE_USB,
 	MOBILE_AP_TYPE_BT,
+	MOBILE_AP_TYPE_WIFI_AP,
 	MOBILE_AP_TYPE_MAX,
 } mobile_ap_type_e;
 
@@ -160,6 +167,7 @@ typedef enum {
 #define TETHERING_SERVICE_NAME		"org.tizen.tethering"
 #define TETHERING_SERVICE_INTERFACE	"org.tizen.tethering"
 
+#define TETHERING_SIGNAL_MATCH_RULE	"type='signal',interface='org.tizen.tethering'"
 #define TETHERING_SIGNAL_NAME_LEN	64
 
 #define SIGNAL_NAME_NET_CLOSED		"net_closed"
@@ -171,9 +179,12 @@ typedef enum {
 #define SIGNAL_NAME_USB_TETHER_OFF	"usb_off"
 #define SIGNAL_NAME_BT_TETHER_ON	"bluetooth_on"
 #define SIGNAL_NAME_BT_TETHER_OFF	"bluetooth_off"
+#define SIGNAL_NAME_WIFI_AP_ON		"wifi_ap_on"
+#define SIGNAL_NAME_WIFI_AP_OFF		"wifi_ap_off"
 #define SIGNAL_NAME_NO_DATA_TIMEOUT	"no_data_timeout"
 #define SIGNAL_NAME_LOW_BATTERY_MODE	"low_batt_mode"
 #define SIGNAL_NAME_FLIGHT_MODE		"flight_mode"
+#define SIGNAL_NAME_POWER_SAVE_MODE		"power_save_mode"
 #define SIGNAL_NAME_DHCP_STATUS		"dhcp_status"
 #define SIGNAL_NAME_SECURITY_TYPE_CHANGED	"security_type_changed"
 #define SIGNAL_NAME_SSID_VISIBILITY_CHANGED	"ssid_visibility_changed"
@@ -191,24 +202,31 @@ typedef enum {
 #define TETHERING_USB_GATEWAY		"192.168.129.1"
 
 #define TETHERING_WIFI_IF		"wlan0"
-#define TETHERING_WIFI_GATEWAY		"192.168.61.1"
+#define TETHERING_WIFI_GATEWAY		"192.168.43.1"
 
 #define TETHERING_BT_IF			"bnep0"
 #define TETHERING_BT_GATEWAY		"192.168.130.1"
 
-#define TETHERING_WIFI_SSID_MAX_LEN	31	/**< Maximum length of ssid */
+#define TETHERING_WIFI_SSID_MAX_LEN	32	/**< Maximum length of ssid */
 #define TETHERING_WIFI_KEY_MIN_LEN	8	/**< Minimum length of wifi key */
-#define TETHERING_WIFI_KEY_MAX_LEN	63	/**< Maximum length of wifi key */
+#define TETHERING_WIFI_KEY_MAX_LEN	64	/**< Maximum length of wifi key */
+#define TETHERING_WIFI_HASH_KEY_MAX_LEN	64
+
+#define VCONFKEY_MOBILE_HOTSPOT_SSID	"memory/private/mobileap-agent/ssid"
+#define TETHERING_PASSPHRASE_PATH	"wifi_tethering.txt"
+#define TETHERING_PASSPHRASE_GROUP_ID	"secure-storage::tethering"
+
 /**
 * End of mobileap-agent common values
 */
-#define TETHERING_DBUS_MAX_RETRY_COUNT			3
 
 #define TETHERING_DEFAULT_SSID				"Redwood"
 #define TETHERING_DEFAULT_PASSPHRASE			"eoiugkl!"
 #define TETHERING_WIFI_SECURITY_TYPE_OPEN_STR		"open"
 #define TETHERING_WIFI_SECURITY_TYPE_WPA2_PSK_STR	"wpa2-psk"
-
+#define TETHERING_ERROR_RECOVERY_MAX			3
+#define SECURITY_TYPE_LEN	32
+#define PSK_ITERATION_COUNT	4096
 
 typedef void (*__handle_cb_t)(DBusGProxy *proxy, const char *name, gpointer data);
 typedef struct {
@@ -217,8 +235,9 @@ typedef struct {
 } __tethering_sig_t;
 
 typedef struct {
-        DBusGConnection *client_bus;
-        DBusGProxy *client_bus_proxy;
+	DBusGConnection *client_bus;
+	DBusGProxy *client_bus_proxy;
+	DBusConnection *client_bus_connection;
 
 	tethering_enabled_cb enabled_cb[TETHERING_TYPE_MAX];
 	void *enabled_user_data[TETHERING_TYPE_MAX];
@@ -234,15 +253,22 @@ typedef struct {
 	void *ssid_visibility_user_data;
 	tethering_wifi_passphrase_changed_cb passphrase_changed_cb;
 	void *passphrase_user_data;
-
+	tethering_wifi_settings_reloaded_cb settings_reloaded_cb;
+	void *settings_reloaded_user_data;
+	tethering_wifi_ap_settings_reloaded_cb ap_settings_reloaded_cb;
+	void *ap_settings_reloaded_user_data;
 	char *ssid;
+	char *ap_ssid;
+	char passphrase[TETHERING_WIFI_KEY_MAX_LEN + 1];
+	tethering_wifi_security_type_e sec_type;
+	bool visibility;
 } __tethering_h;
 
 typedef struct {
 	tethering_type_e interface;			/**< interface type */
 	char ip[TETHERING_STR_INFO_LEN];		/**< assigned IP address */
 	char mac[TETHERING_STR_INFO_LEN];		/**< MAC Address */
-	char hostname[TETHERING_STR_HOSTNAME_LEN];	/**< alphanumeric name */
+	char *hostname;
 	time_t tm;	/**< connection time */
 } __tethering_client_h;
 
@@ -253,6 +279,13 @@ typedef struct {
 	char gateway_address[TETHERING_STR_INFO_LEN];	/**< gateway address of interface */
 	char subnet_mask[TETHERING_STR_INFO_LEN];	/**< subnet mask of interface */
 } __tethering_interface_t;
+
+typedef struct {
+	char ssid[TETHERING_WIFI_SSID_MAX_LEN + 1];
+	char key[TETHERING_WIFI_KEY_MAX_LEN + 1];
+	tethering_wifi_security_type_e sec_type;
+	bool visibility;
+} _softap_settings_t;
 
 #ifdef __cplusplus
 }

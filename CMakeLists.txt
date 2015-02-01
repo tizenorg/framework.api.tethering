@@ -9,11 +9,23 @@ SET(PREFIX ${CMAKE_INSTALL_PREFIX})
 SET(INC_DIR include)
 INCLUDE_DIRECTORIES(${INC_DIR})
 
-SET(dependents "dlog glib-2.0 capi-base-common dbus-glib-1 vconf")
+SET(dependents "dlog glib-2.0 capi-base-common dbus-1 dbus-glib-1 vconf secure-storage libssl")
 
 IF("${CMAKE_BUILD_TYPE}" STREQUAL "")
 	SET(CMAKE_BUILD_TYPE "Release")
 ENDIF("${CMAKE_BUILD_TYPE}" STREQUAL "")
+
+IF("${CMAKE_BUILD_TYPE}" STREQUAL "Private")
+	SET(CMAKE_BUILD_TYPE "Release")
+ENDIF("${CMAKE_BUILD_TYPE}" STREQUAL "Private")
+
+IF(TIZEN_WEARABLE)
+	ADD_DEFINITIONS(-DTIZEN_WEARABLE)
+ENDIF(TIZEN_WEARABLE)
+
+IF(TIZEN_MOBILE)
+	ADD_DEFINITIONS(-DTIZEN_MOBILE)
+ENDIF(TIZEN_MOBILE)
 
 INCLUDE(FindPkgConfig)
 pkg_check_modules(${fw_name} REQUIRED ${dependents})
