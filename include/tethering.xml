@@ -5,12 +5,9 @@
 	"http://standards.freedesktop.org/dbus/1.0/introspect.dtd">
 
 <node>
-	<interface name="com.samsung.mobileap">
+	<interface name="org.tizen.tethering">
 
 		<!-- Method definitions -->
-
-		<method name="deinit">
-		</method>
 
 		<method name="disable">
 			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
@@ -23,6 +20,7 @@
 			<arg type="s" name="ssid" direction="in"/>
 			<arg type="s" name="key" direction="in"/>
 			<arg type="i" name="visibility" direction="in"/>
+			<arg type="i" name="security" direction="in"/>
 			<arg type="u" name="type" direction="out"/>
 			<arg type="u" name="result" direction="out"/>
 		</method>
@@ -57,15 +55,44 @@
 			<arg type="u" name="result" direction="out"/>
 		</method>
 
+		<method name="enable_wifi_ap">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="s" name="ssid" direction="in"/>
+			<arg type="s" name="key" direction="in"/>
+			<arg type="i" name="visibility" direction="in"/>
+			<arg type="i" name="security" direction="in"/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="disable_wifi_ap">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="u" name="type" direction="out"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="reload_wifi_settings">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="s" name="ssid" direction="in"/>
+			<arg type="s" name="key" direction="in"/>
+			<arg type="i" name="visibility" direction="in"/>
+			<arg type="i" name="security" direction="in"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
+		<method name="reload_wifi_ap_settings">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+			<arg type="s" name="ssid" direction="in"/>
+			<arg type="s" name="key" direction="in"/>
+			<arg type="i" name="visibility" direction="in"/>
+			<arg type="i" name="security" direction="in"/>
+			<arg type="u" name="result" direction="out"/>
+		</method>
+
 		<method name="get_station_info">
 			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
 			<arg type="u" name="type" direction="out"/>
-			<arg type="a(usss)" name="station" direction="out"/>
-		</method>
-
-		<method name="get_usb_station_info">
-			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-			<arg type="a(sss)" name="usb_station" direction="out"/>
+			<arg type="a(usssu)" name="station" direction="out"/>
 		</method>
 
 		<method name="get_data_packet_usage">
@@ -73,48 +100,6 @@
 			<arg type="u" name="type" direction="out"/>
 			<arg type="t" name="rx_data" direction="out"/>
 			<arg type="t" name="tx_data" direction="out"/>
-		</method>
-
-		<method name="get_usb_interface_info">
-			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-			<arg type="a(ssss)" name="interface" direction="out"/>
-		</method>
-
-		<method name="get_wifi_tethering_hide_mode">
-			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-			<arg type="i" name="hide_mode" direction="out"/>
-		</method>
-
-		<method name="set_wifi_tethering_hide_mode">
-			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-			<arg type="i" name="hide_mode" direction="in"/>
-		</method>
-
-		<method name="get_wifi_tethering_ssid">
-			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-			<arg type="s" name="ssid" direction="out"/>
-		</method>
-
-		<method name="get_wifi_tethering_security_type">
-			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-			<arg type="s" name="security_type" direction="out"/>
-		</method>
-
-		<method name="set_wifi_tethering_security_type">
-			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-			<arg type="s" name="security_type" direction="in"/>
-		</method>
-
-		<method name="get_wifi_tethering_passphrase">
-			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-			<arg type="s" name="passphrase" direction="out"/>
-			<arg type="u" name="len" direction="out"/>
-		</method>
-
-		<method name="set_wifi_tethering_passphrase">
-			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-			<arg type="s" name="passphrase" direction="in"/>
-			<arg type="u" name="len" direction="in"/>
 		</method>
 
 		<!-- Signal (D-Bus) definitions -->
@@ -154,6 +139,14 @@
 			<arg type="s" name="arg1" direction="out"/>
 		</signal>
 
+		<signal name="wifi_ap_on">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
+		<signal name="wifi_ap_off">
+			<arg type="s" name="arg1" direction="out"/>
+		</signal>
+
 		<signal name="no_data_timeout">
 			<arg type="s" name="arg1" direction="out"/>
 		</signal>
@@ -166,13 +159,8 @@
 			<arg type="s" name="arg1" direction="out"/>
 		</signal>
 
-		<signal name="dhcp_status">
-			<arg type="s" name="member" direction="out"/>
-			<arg type="s" name="ip" direction="out"/>
-			<arg type="s" name="mac" direction="out"/>
-			<arg type="s" name="name" direction="out"/>
+		<signal name="power_save_mode">
+			<arg type="s" name="arg1" direction="out"/>
 		</signal>
-
 	</interface>
 </node>
-

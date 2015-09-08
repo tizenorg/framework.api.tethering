@@ -18,12 +18,15 @@
 #include <string.h>
 #include "tethering_private.h"
 
-int tethering_client_clone(tethering_client_h *dest, tethering_client_h origin)
+API int tethering_client_clone(tethering_client_h *dest, tethering_client_h origin)
 {
 	_retvm_if(dest == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(dest) is NULL\n");
 
 	__tethering_client_h *si = NULL;
+	__tethering_client_h *source = NULL;
+
+	source = (__tethering_client_h *)origin;
 
 	si = malloc(sizeof(__tethering_client_h));
 	if (si == NULL) {
@@ -31,25 +34,36 @@ int tethering_client_clone(tethering_client_h *dest, tethering_client_h origin)
 		return TETHERING_ERROR_OUT_OF_MEMORY;
 	}
 
-	memcpy(si, (__tethering_client_h *)origin,
-			sizeof(__tethering_client_h));
+	memcpy(si, source, sizeof(__tethering_client_h));
+	si->hostname = g_strdup(source->hostname);
+	if (si->hostname == NULL) {
+		ERR("malloc is failed\n");
+		free(si);
+		return TETHERING_ERROR_OUT_OF_MEMORY;
+	}
 
 	*dest = (tethering_client_h)si;
 
 	return TETHERING_ERROR_NONE;
 }
 
-int tethering_client_destroy(tethering_client_h client)
+API int tethering_client_destroy(tethering_client_h client)
 {
 	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(client) is NULL\n");
+
+	__tethering_client_h *si = NULL;
+
+	si = (__tethering_client_h *)client;
+
+	g_free(si->hostname);
 
 	free(client);
 
 	return TETHERING_ERROR_NONE;
 }
 
-int tethering_client_get_tethering_type(tethering_client_h client, tethering_type_e *type)
+API int tethering_client_get_tethering_type(tethering_client_h client, tethering_type_e *type)
 {
 	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(client) is NULL\n");
@@ -63,7 +77,7 @@ int tethering_client_get_tethering_type(tethering_client_h client, tethering_typ
 	return TETHERING_ERROR_NONE;
 }
 
-int tethering_client_get_name(tethering_client_h client, char **name)
+API int tethering_client_get_name(tethering_client_h client, char **name)
 {
 	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(client) is NULL\n");
@@ -81,7 +95,7 @@ int tethering_client_get_name(tethering_client_h client, char **name)
 	return TETHERING_ERROR_NONE;
 }
 
-int tethering_client_get_ip_address(tethering_client_h client, tethering_address_family_e address_family, char **ip_address)
+API int tethering_client_get_ip_address(tethering_client_h client, tethering_address_family_e address_family, char **ip_address)
 {
 	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(client) is NULL\n");
@@ -99,7 +113,7 @@ int tethering_client_get_ip_address(tethering_client_h client, tethering_address
 	return TETHERING_ERROR_NONE;
 }
 
-int tethering_client_get_mac_address(tethering_client_h client, char **mac_address)
+API int tethering_client_get_mac_address(tethering_client_h client, char **mac_address)
 {
 	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(client) is NULL\n");
@@ -113,6 +127,19 @@ int tethering_client_get_mac_address(tethering_client_h client, char **mac_addre
 		ERR("strdup is failed\n");
 		return TETHERING_ERROR_OUT_OF_MEMORY;
 	}
+
+	return TETHERING_ERROR_NONE;
+}
+
+API int tethering_client_get_time(tethering_client_h client, time_t *timestamp)
+{
+	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
+			"Parameter(client) is NULL\n");
+
+
+	__tethering_client_h *si = (__tethering_client_h *)client;
+
+	*timestamp = si->tm;
 
 	return TETHERING_ERROR_NONE;
 }
