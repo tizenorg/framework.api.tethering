@@ -159,8 +159,5 @@
 			<arg type="s" name="arg1" direction="out"/>
 		</signal>
 
-		<signal name="power_save_mode">
-			<arg type="s" name="arg1" direction="out"/>
-		</signal>
 	</interface>
 </node>

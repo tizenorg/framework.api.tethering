@@ -20,10 +20,8 @@
 #define LOG_TAG	"CAPI_NETWORK_TETHERING"
 
 #include <glib.h>
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus-glib-lowlevel.h>
 #include <dlog.h>
-
+#include <gio/gio.h>
 #include "tethering.h"
 
 #ifdef __cplusplus
@@ -75,6 +73,27 @@ extern "C" {
 			return (val); \
 		} \
 	} while (0)
+
+/**
+ * To check supported feature
+ */
+
+#define TETHERING_FEATURE		"http://tizen.org/feature/network.tethering"
+#define TETHERING_BT_FEATURE		"http://tizen.org/feature/network.tethering.bluetooth"
+#define TETHERING_USB_FEATURE		"http://tizen.org/feature/network.tethering.usb"
+#define TETHERING_WIFI_FEATURE		"http://tizen.org/feature/network.tethering.wifi"
+
+#define CHECK_FEATURE_SUPPORTED(...) \
+	do { \
+		int rv = tethering_check_feature_supported(__VA_ARGS__, NULL); \
+		if(rv != TETHERING_ERROR_NONE) { \
+			ERR("Not supported\n"); \
+			set_last_result(TETHERING_ERROR_NOT_SUPPORT_API); \
+			return TETHERING_ERROR_NOT_SUPPORT_API; \
+		} \
+	} while (0)
+
+int tethering_check_feature_supported(const char* feature, ...);
 
 /**
 * Start of mobileap-agent common values
@@ -144,24 +163,26 @@ typedef enum {
 	MOBILE_AP_TYPE_MAX,
 } mobile_ap_type_e;
 
-
-/*
-* from mobileap_internal.h
-*/
-#define DBUS_STRUCT_UINT_STRING (dbus_g_type_get_struct ("GValueArray", \
-			G_TYPE_UINT, G_TYPE_STRING, G_TYPE_INVALID))
-
-#define DBUS_STRUCT_STATIONS (dbus_g_type_get_struct ("GValueArray", \
-			G_TYPE_UINT, G_TYPE_STRING, G_TYPE_STRING, \
-			G_TYPE_STRING, G_TYPE_UINT, G_TYPE_INVALID))
-
-#define DBUS_STRUCT_STATION (dbus_g_type_get_struct ("GValueArray", \
-			G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, \
-			G_TYPE_INVALID))
-
-#define DBUS_STRUCT_INTERFACE (dbus_g_type_get_struct ("GValueArray", \
-			G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, \
-			G_TYPE_STRING, G_TYPE_INVALID))
+typedef enum {
+	E_SIGNAL_NET_CLOSED = 0,
+	E_SIGNAL_WIFI_TETHER_ON,
+	E_SIGNAL_WIFI_TETHER_OFF,
+	E_SIGNAL_USB_TETHER_ON,
+	E_SIGNAL_USB_TETHER_OFF,
+	E_SIGNAL_BT_TETHER_ON,
+	E_SIGNAL_BT_TETHER_OFF,
+	E_SIGNAL_WIFI_AP_ON,
+	E_SIGNAL_WIFI_AP_OFF,
+	E_SIGNAL_NO_DATA_TIMEOUT,
+	E_SIGNAL_LOW_BATTERY_MODE,
+	E_SIGNAL_FLIGHT_MODE,
+	E_SIGNAL_POWER_SAVE_MODE,
+	E_SIGNAL_SECURITY_TYPE_CHANGED,
+	E_SIGNAL_SSID_VISIBILITY_CHANGED,
+	E_SIGNAL_PASSPHRASE_CHANGED,
+	E_SIGNAL_DHCP_STATUS,
+	E_SIGNAL_MAX
+} mobile_ap_sig_e;
 
 #define TETHERING_SERVICE_OBJECT_PATH	"/Tethering"
 #define TETHERING_SERVICE_NAME		"org.tizen.tethering"
@@ -184,11 +205,10 @@ typedef enum {
 #define SIGNAL_NAME_NO_DATA_TIMEOUT	"no_data_timeout"
 #define SIGNAL_NAME_LOW_BATTERY_MODE	"low_batt_mode"
 #define SIGNAL_NAME_FLIGHT_MODE		"flight_mode"
-#define SIGNAL_NAME_POWER_SAVE_MODE		"power_save_mode"
-#define SIGNAL_NAME_DHCP_STATUS		"dhcp_status"
 #define SIGNAL_NAME_SECURITY_TYPE_CHANGED	"security_type_changed"
 #define SIGNAL_NAME_SSID_VISIBILITY_CHANGED	"ssid_visibility_changed"
 #define SIGNAL_NAME_PASSPHRASE_CHANGED		"passphrase_changed"
+#define SIGNAL_NAME_DHCP_STATUS		"dhcp_status"
 
 #define SIGNAL_MSG_NOT_AVAIL_INTERFACE	"Interface is not available"
 #define SIGNAL_MSG_TIMEOUT		"There is no connection for a while"
@@ -228,16 +248,20 @@ typedef enum {
 #define SECURITY_TYPE_LEN	32
 #define PSK_ITERATION_COUNT	4096
 
-typedef void (*__handle_cb_t)(DBusGProxy *proxy, const char *name, gpointer data);
+typedef void (*__handle_cb_t)(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
 typedef struct {
+	int sig_id;
 	char name[TETHERING_SIGNAL_NAME_LEN];
 	__handle_cb_t cb;
 } __tethering_sig_t;
 
 typedef struct {
-	DBusGConnection *client_bus;
-	DBusGProxy *client_bus_proxy;
-	DBusConnection *client_bus_connection;
+	GDBusConnection *client_bus;
+	GDBusProxy *client_bus_proxy;
+	GCancellable *cancellable;
 
 	tethering_enabled_cb enabled_cb[TETHERING_TYPE_MAX];
 	void *enabled_user_data[TETHERING_TYPE_MAX];

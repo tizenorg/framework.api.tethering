@@ -24,74 +24,117 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <dbus/dbus.h>
-#include <dbus/dbus-glib-lowlevel.h>
-
+#include <gio/gio.h>
 #include <vconf.h>
 #include <ss_manager.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
-#include "tethering-client-stub.h"
-#include "marshal.h"
 #include "tethering_private.h"
 
-static void __handle_wifi_tether_on(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_wifi_tether_off(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_usb_tether_on(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_usb_tether_off(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_bt_tether_on(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_bt_tether_off(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_wifi_ap_on(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_wifi_ap_off(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_net_closed(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_no_data_timeout(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_low_battery_mode(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_flight_mode(DBusGProxy *proxy, const char *value_name, gpointer user_data);
-static void __handle_power_save_mode(DBusGProxy *proxy, const char *value_name, gpointer user_data);
+static void __handle_wifi_tether_on(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data);
+
+static void __handle_wifi_tether_off(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_usb_tether_on(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_usb_tether_off(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_bt_tether_on(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_bt_tether_off(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_wifi_ap_on(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_wifi_ap_off(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_net_closed(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_no_data_timeout(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_low_battery_mode(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_flight_mode(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_security_type_changed(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_ssid_visibility_changed(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_passphrase_changed(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
+
+static void __handle_dhcp(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data);
 
 static __tethering_sig_t sigs[] = {
-	{SIGNAL_NAME_NET_CLOSED, __handle_net_closed},
-	{SIGNAL_NAME_WIFI_TETHER_ON, __handle_wifi_tether_on},
-	{SIGNAL_NAME_WIFI_TETHER_OFF, __handle_wifi_tether_off},
-	{SIGNAL_NAME_USB_TETHER_ON, __handle_usb_tether_on},
-	{SIGNAL_NAME_USB_TETHER_OFF, __handle_usb_tether_off},
-	{SIGNAL_NAME_BT_TETHER_ON, __handle_bt_tether_on},
-	{SIGNAL_NAME_BT_TETHER_OFF, __handle_bt_tether_off},
-	{SIGNAL_NAME_WIFI_AP_ON, __handle_wifi_ap_on},
-	{SIGNAL_NAME_WIFI_AP_OFF, __handle_wifi_ap_off},
-	{SIGNAL_NAME_NO_DATA_TIMEOUT, __handle_no_data_timeout},
-	{SIGNAL_NAME_LOW_BATTERY_MODE, __handle_low_battery_mode},
-	{SIGNAL_NAME_FLIGHT_MODE, __handle_flight_mode},
-	{SIGNAL_NAME_POWER_SAVE_MODE, __handle_power_save_mode},
-	{"", NULL}};
+	{0, SIGNAL_NAME_NET_CLOSED, __handle_net_closed},
+	{0, SIGNAL_NAME_WIFI_TETHER_ON, __handle_wifi_tether_on},
+	{0, SIGNAL_NAME_WIFI_TETHER_OFF, __handle_wifi_tether_off},
+	{0, SIGNAL_NAME_USB_TETHER_ON, __handle_usb_tether_on},
+	{0, SIGNAL_NAME_USB_TETHER_OFF, __handle_usb_tether_off},
+	{0, SIGNAL_NAME_BT_TETHER_ON, __handle_bt_tether_on},
+	{0, SIGNAL_NAME_BT_TETHER_OFF, __handle_bt_tether_off},
+	{0, SIGNAL_NAME_WIFI_AP_ON, __handle_wifi_ap_on},
+	{0, SIGNAL_NAME_WIFI_AP_OFF, __handle_wifi_ap_off},
+	{0, SIGNAL_NAME_NO_DATA_TIMEOUT, __handle_no_data_timeout},
+	{0, SIGNAL_NAME_LOW_BATTERY_MODE, __handle_low_battery_mode},
+	{0, SIGNAL_NAME_FLIGHT_MODE, __handle_flight_mode},
+	{0, SIGNAL_NAME_SECURITY_TYPE_CHANGED, __handle_security_type_changed},
+	{0, SIGNAL_NAME_SSID_VISIBILITY_CHANGED, __handle_ssid_visibility_changed},
+	{0, SIGNAL_NAME_PASSPHRASE_CHANGED, __handle_passphrase_changed},
+	{0, SIGNAL_NAME_DHCP_STATUS, __handle_dhcp},
+	{0, "", NULL}};
 
 static int retry = 0;
 
-static void __send_dbus_signal(DBusConnection *conn, const char *signal_name, const char *arg)
+static void __send_dbus_signal(GDBusConnection *conn, const char *signal_name, const char *arg)
 {
 	if (conn == NULL || signal_name == NULL)
 		return;
 
-	DBusMessage *signal = NULL;
+	GVariant *message = NULL;
+	GError *error = NULL;
 
-	signal = dbus_message_new_signal(TETHERING_SERVICE_OBJECT_PATH,
-			TETHERING_SERVICE_INTERFACE, signal_name);
-	if (!signal) {
-		ERR("Unable to allocate D-Bus signal\n");
-		return;
+	if (arg) {
+		message = g_variant_new("(s)", arg);
 	}
 
-	if (arg && !dbus_message_append_args(signal, DBUS_TYPE_STRING, &arg,
-				DBUS_TYPE_INVALID)) {
-		ERR("dbus_message_append_args is failed\n");
-		dbus_message_unref(signal);
-		return;
+	g_dbus_connection_emit_signal(conn, NULL, TETHERING_SERVICE_OBJECT_PATH,
+					TETHERING_SERVICE_INTERFACE, signal_name, message, &error);
+	if (error) {
+		ERR("g_dbus_connection_emit_signal is failed because  %s\n", error->message);
+		g_error_free(error);
 	}
-
-	if (dbus_connection_send(conn, signal, NULL) == FALSE)
-		ERR("dbus_connection_send is failed\n");
-	dbus_message_unref(signal);
-
-	return;
+	g_variant_unref(message);
 }
 
 static bool __any_tethering_is_enabled(tethering_h tethering)
@@ -186,7 +229,6 @@ static tethering_error_e __get_visible(bool *visible)
 		*visible = false;
 	else
 		*visible = true;
-
 	return TETHERING_ERROR_NONE;
 }
 
@@ -327,9 +369,9 @@ static tethering_error_e __get_error(int agent_error)
 	return err;
 }
 
-static void __handle_dhcp(DBusGProxy *proxy, const char *member,
-		guint interface, const char *ip, const char *mac,
-		const char *name, guint timestamp, gpointer user_data)
+static void __handle_dhcp(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -338,53 +380,66 @@ static void __handle_dhcp(DBusGProxy *proxy, const char *member,
 	__tethering_h *th = (__tethering_h *)user_data;
 	bool opened = false;
 	tethering_type_e type = 0;
+	mobile_ap_type_e ap_type = 0;
 	tethering_connection_state_changed_cb ccb = NULL;
-	__tethering_client_h client = {0, };
+	__tethering_client_h client;
 	void *data = NULL;
+	char *buf = NULL;
+	char *name = NULL;
+	char *mac= NULL;
+	char *ip= NULL;
+	guint timestamp;
 
-	if (!g_strcmp0(member, "DhcpConnected")) {
+	memset(&client, 0, sizeof(__tethering_client_h));
+	g_variant_get(parameters, "(susssu)", &buf, &ap_type, &ip, &mac, &name, &timestamp);
+
+	if (!g_strcmp0(buf, "DhcpConnected")) {
 		opened = true;
-	} else if (!g_strcmp0(member, "DhcpLeaseDeleted")) {
+	} else if (!g_strcmp0(buf, "DhcpLeaseDeleted")) {
 		opened = false;
 	} else {
-		ERR("Unknown event [%s]\n", member);
-		return;
+		ERR("Unknown event [%s]\n", buf);
+		goto DONE;
 	}
 
-	if (interface == MOBILE_AP_TYPE_USB)
+	if (ap_type == MOBILE_AP_TYPE_USB)
 		type = TETHERING_TYPE_USB;
-	else if (interface == MOBILE_AP_TYPE_WIFI)
+	else if (ap_type == MOBILE_AP_TYPE_WIFI)
 		type = TETHERING_TYPE_WIFI;
-	else if (interface == MOBILE_AP_TYPE_BT)
+	else if (ap_type == MOBILE_AP_TYPE_BT)
 		type = TETHERING_TYPE_BT;
-	else if (interface == MOBILE_AP_TYPE_WIFI_AP) {
+	else if (ap_type == MOBILE_AP_TYPE_WIFI_AP) {
 		type = TETHERING_TYPE_RESERVED;
 	} else {
-		ERR("Not supported tethering type [%d]\n", interface);
-		return;
+		ERR("Not supported tethering type [%d]\n", ap_type);
+		goto DONE;
 	}
 
 	ccb = th->changed_cb[type];
 	if (ccb == NULL)
-		return;
+		goto DONE;
 	data = th->changed_user_data[type];
 
 	client.interface = type;
 	g_strlcpy(client.ip, ip, sizeof(client.ip));
 	g_strlcpy(client.mac, mac, sizeof(client.mac));
-	if (name)
+	if (name != NULL)
 		client.hostname = g_strdup(name);
 	client.tm = (time_t)timestamp;
 
 	ccb((tethering_client_h)&client, opened, data);
-
 	g_free(client.hostname);
-
+DONE :
+	g_free(buf);
+	g_free(ip);
+	g_free(mac);
+	g_free(name);
 	DBG("-\n");
-	return;
 }
 
-static void __handle_net_closed(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_net_closed(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -405,10 +460,12 @@ static void __handle_net_closed(DBusGProxy *proxy, const char *value_name, gpoin
 		dcb(TETHERING_ERROR_NONE, type, code, data);
 	}
 
-	return;
+	DBG("-\n");
 }
 
-static void __handle_wifi_tether_on(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_wifi_tether_on(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -426,9 +483,12 @@ static void __handle_wifi_tether_on(DBusGProxy *proxy, const char *value_name, g
 	data = th->enabled_user_data[type];
 
 	ecb(TETHERING_ERROR_NONE, type, is_requested, data);
+	DBG("-\n");
 }
 
-static void __handle_wifi_tether_off(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_wifi_tether_off(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -439,23 +499,27 @@ static void __handle_wifi_tether_off(DBusGProxy *proxy, const char *value_name, 
 	tethering_disabled_cause_e code = TETHERING_DISABLED_BY_OTHERS;
 	tethering_disabled_cb dcb = NULL;
 	void *data = NULL;
+	char *buf = NULL;
 
 	dcb = th->disabled_cb[type];
 	if (dcb == NULL)
 		return;
 	data = th->disabled_user_data[type];
-
-	if (!g_strcmp0(value_name, SIGNAL_MSG_NOT_AVAIL_INTERFACE))
+	g_variant_get(parameters, "(s)", &buf);
+	if (!g_strcmp0(buf, SIGNAL_MSG_NOT_AVAIL_INTERFACE))
 		code = TETHERING_DISABLED_BY_WIFI_ON;
-	else if (!g_strcmp0(value_name, SIGNAL_MSG_TIMEOUT))
+	else if (!g_strcmp0(buf, SIGNAL_MSG_TIMEOUT))
 		code = TETHERING_DISABLED_BY_TIMEOUT;
 
+	g_free(buf);
 	dcb(TETHERING_ERROR_NONE, type, code, data);
 
-	return;
+	DBG("-\n");
 }
 
-static void __handle_usb_tether_on(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_usb_tether_on(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -473,9 +537,12 @@ static void __handle_usb_tether_on(DBusGProxy *proxy, const char *value_name, gp
 	data = th->enabled_user_data[type];
 
 	ecb(TETHERING_ERROR_NONE, type, is_requested, data);
+	DBG("-\n");
 }
 
-static void __handle_usb_tether_off(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_usb_tether_off(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -486,21 +553,25 @@ static void __handle_usb_tether_off(DBusGProxy *proxy, const char *value_name, g
 	tethering_disabled_cause_e code = TETHERING_DISABLED_BY_OTHERS;
 	tethering_disabled_cb dcb = NULL;
 	void *data = NULL;
+	char *buf = NULL;
 
 	dcb = th->disabled_cb[type];
 	if (dcb == NULL)
 		return;
 	data = th->disabled_user_data[type];
 
-	if (!g_strcmp0(value_name, SIGNAL_MSG_NOT_AVAIL_INTERFACE))
+	g_variant_get(parameters, "(s)", &buf);
+	if (!g_strcmp0(buf, SIGNAL_MSG_NOT_AVAIL_INTERFACE))
 		code = TETHERING_DISABLED_BY_USB_DISCONNECTION;
 
 	dcb(TETHERING_ERROR_NONE, type, code, data);
-
-	return;
+	g_free(buf);
+	DBG("-\n");
 }
 
-static void __handle_bt_tether_on(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_bt_tether_on(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -518,9 +589,12 @@ static void __handle_bt_tether_on(DBusGProxy *proxy, const char *value_name, gpo
 	data = th->enabled_user_data[type];
 
 	ecb(TETHERING_ERROR_NONE, type, is_requested, data);
+	DBG("-\n");
 }
 
-static void __handle_bt_tether_off(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_bt_tether_off(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -531,23 +605,27 @@ static void __handle_bt_tether_off(DBusGProxy *proxy, const char *value_name, gp
 	tethering_disabled_cause_e code = TETHERING_DISABLED_BY_OTHERS;
 	tethering_disabled_cb dcb = NULL;
 	void *data = NULL;
+	char *buf = NULL;
 
 	dcb = th->disabled_cb[type];
 	if (dcb == NULL)
 		return;
 	data = th->disabled_user_data[type];
-
-	if (!g_strcmp0(value_name, SIGNAL_MSG_NOT_AVAIL_INTERFACE))
+	g_variant_get(parameters, "(s)", &buf);
+	if (!g_strcmp0(buf, SIGNAL_MSG_NOT_AVAIL_INTERFACE))
 		code = TETHERING_DISABLED_BY_BT_OFF;
-	else if (!g_strcmp0(value_name, SIGNAL_MSG_TIMEOUT))
+	else if (!g_strcmp0(buf, SIGNAL_MSG_TIMEOUT))
 		code = TETHERING_DISABLED_BY_TIMEOUT;
 
 	dcb(TETHERING_ERROR_NONE, type, code, data);
 
-	return;
+	g_free(buf);
+	DBG("-\n");
 }
 
-static void __handle_wifi_ap_on(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_wifi_ap_on(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -565,9 +643,12 @@ static void __handle_wifi_ap_on(DBusGProxy *proxy, const char *value_name, gpoin
 	data = th->enabled_user_data[type];
 
 	ecb(TETHERING_ERROR_NONE, type, is_requested, data);
+	DBG("-\n");
 }
 
-static void __handle_wifi_ap_off(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_wifi_ap_off(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -578,23 +659,27 @@ static void __handle_wifi_ap_off(DBusGProxy *proxy, const char *value_name, gpoi
 	tethering_disabled_cause_e code = TETHERING_DISABLED_BY_OTHERS;
 	tethering_disabled_cb dcb = NULL;
 	void *data = NULL;
+	char *buf= NULL;
 
 	dcb = th->disabled_cb[type];
 	if (dcb == NULL)
 		return;
 	data = th->disabled_user_data[type];
-
-	if (!g_strcmp0(value_name, SIGNAL_MSG_NOT_AVAIL_INTERFACE))
+	g_variant_get(parameters, "(s)", &buf);
+	if (!g_strcmp0(buf, SIGNAL_MSG_NOT_AVAIL_INTERFACE))
 		code = TETHERING_DISABLED_BY_WIFI_ON;
-	else if (!g_strcmp0(value_name, SIGNAL_MSG_TIMEOUT))
+	else if (!g_strcmp0(buf, SIGNAL_MSG_TIMEOUT))
 		code = TETHERING_DISABLED_BY_TIMEOUT;
+	g_free(buf);
 
 	dcb(TETHERING_ERROR_NONE, type, code, data);
 
-	return;
+	DBG("-\n");
 }
 
-static void __handle_no_data_timeout(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_no_data_timeout(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -614,9 +699,12 @@ static void __handle_no_data_timeout(DBusGProxy *proxy, const char *value_name, 
 
 		dcb(TETHERING_ERROR_NONE, type, code, data);
 	}
+	DBG("-\n");
 }
 
-static void __handle_low_battery_mode(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_low_battery_mode(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -636,9 +724,12 @@ static void __handle_low_battery_mode(DBusGProxy *proxy, const char *value_name,
 
 		dcb(TETHERING_ERROR_NONE, type, code, data);
 	}
+	DBG("-\n");
 }
 
-static void __handle_flight_mode(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_flight_mode(GDBusConnection *connection, const gchar *sender_name,
+			const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+			GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
@@ -658,87 +749,82 @@ static void __handle_flight_mode(DBusGProxy *proxy, const char *value_name, gpoi
 
 		dcb(TETHERING_ERROR_NONE, type, code, data);
 	}
+	DBG("-\n");
 }
 
-static void __handle_power_save_mode(DBusGProxy *proxy, const char *value_name, gpointer user_data)
+static void __handle_security_type_changed(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data)
+
 {
 	DBG("+\n");
 
 	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
-
 	__tethering_h *th = (__tethering_h *)user_data;
-	tethering_type_e type = 0;
-	tethering_disabled_cb dcb = NULL;
-	void *data = NULL;
-	tethering_disabled_cause_e code = TETHERING_DISABLED_BY_POWER_SAVE_MODE;
-
-	for (type = TETHERING_TYPE_WIFI; type <= TETHERING_TYPE_RESERVED; type++) {
-		dcb = th->disabled_cb[type];
-		if (dcb == NULL)
-			continue;
-		data = th->disabled_user_data[type];
-
-		dcb(TETHERING_ERROR_NONE, type, code, data);
-	}
-}
-
-static void __handle_security_type_changed(__tethering_h *th, const char *value_name)
-{
-	DBG("+\n");
-
-	_retm_if(th == NULL, "parameter(th) is NULL\n");
 
 	tethering_wifi_security_type_changed_cb scb = NULL;
 	void *data = NULL;
 	tethering_wifi_security_type_e security_type;
+	char *buf = NULL;
 
 	scb = th->security_type_changed_cb;
 	if (scb == NULL)
 		return;
 
+	g_variant_get(parameters, "(s)", &buf);
 	data = th->security_type_user_data;
-	if (g_strcmp0(value_name, TETHERING_WIFI_SECURITY_TYPE_OPEN_STR) == 0)
+	if (g_strcmp0(buf, TETHERING_WIFI_SECURITY_TYPE_OPEN_STR) == 0)
 		security_type = TETHERING_WIFI_SECURITY_TYPE_NONE;
-	else if (g_strcmp0(value_name, TETHERING_WIFI_SECURITY_TYPE_WPA2_PSK_STR) == 0)
+	else if (g_strcmp0(buf, TETHERING_WIFI_SECURITY_TYPE_WPA2_PSK_STR) == 0)
 		security_type = TETHERING_WIFI_SECURITY_TYPE_WPA2_PSK;
 	else {
-		SERR("Unknown type : %s\n", value_name);
+		SERR("Unknown type : %s\n", buf);
+		g_free(buf);
 		return;
 	}
-
+	g_free(buf);
 	scb(security_type, data);
 
 	return;
 }
 
-static void __handle_ssid_visibility_changed(__tethering_h *th, const char *value_name)
+static void __handle_ssid_visibility_changed(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
-	_retm_if(th == NULL, "parameter(th) is NULL\n");
+	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
+	__tethering_h *th = (__tethering_h *)user_data;
 
 	tethering_wifi_ssid_visibility_changed_cb scb = NULL;
 	void *data = NULL;
 	bool visible = false;
+	char *buf = NULL;
 
 	scb = th->ssid_visibility_changed_cb;
-	if (scb == NULL)
+	if (scb == NULL) {
+		DBG("-\n");
 		return;
-
+	}
+	g_variant_get(parameters, "(s)", &buf);
 	data = th->ssid_visibility_user_data;
-	if (g_strcmp0(value_name, SIGNAL_MSG_SSID_VISIBLE) == 0)
+	if (g_strcmp0(buf, SIGNAL_MSG_SSID_VISIBLE) == 0)
 		visible = true;
 
 	scb(visible, data);
-
-	return;
+	g_free(buf);
+	DBG("-\n");
 }
 
-static void __handle_passphrase_changed(__tethering_h *th)
+static void __handle_passphrase_changed(GDBusConnection *connection, const gchar *sender_name,
+		const gchar *object_path, const gchar *interface_name, const gchar *signal_name,
+		GVariant *parameters, gpointer user_data)
 {
 	DBG("+\n");
 
-	_retm_if(th == NULL, "parameter(th) is NULL\n");
+	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
+	__tethering_h *th = (__tethering_h *)user_data;
 
 	tethering_wifi_passphrase_changed_cb pcb = NULL;
 	void *data = NULL;
@@ -750,240 +836,240 @@ static void __handle_passphrase_changed(__tethering_h *th)
 	data = th->passphrase_user_data;
 
 	pcb(data);
-
-	return;
+	DBG("-\n");
 }
 
-static DBusHandlerResult __handle_signal_filter(DBusConnection *conn,
-		DBusMessage *msg, void *user_data)
-{
-	if (conn == NULL || msg == NULL || user_data == NULL) {
-		ERR("Invalid param\n");
-		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-	}
-
-	__tethering_h *th = (__tethering_h *)user_data;
-	DBusError error;
-	char *arg = NULL;
-
-	if (!g_strcmp0(dbus_bus_get_unique_name(conn), dbus_message_get_sender(msg)))
-		return DBUS_HANDLER_RESULT_HANDLED;
-
-	if (dbus_message_is_signal(msg, TETHERING_SERVICE_INTERFACE,
-				SIGNAL_NAME_SECURITY_TYPE_CHANGED)) {
-		dbus_error_init(&error);
-		if (!dbus_message_get_args(msg, &error,
-					DBUS_TYPE_STRING, &arg,
-					DBUS_TYPE_INVALID)) {
-			ERR("Cannot read message, cause: %s\n", error.message);
-			dbus_error_free(&error);
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-		}
-
-		__handle_security_type_changed(th, arg);
-		return DBUS_HANDLER_RESULT_HANDLED;
-	} else if (dbus_message_is_signal(msg, TETHERING_SERVICE_INTERFACE,
-				SIGNAL_NAME_SSID_VISIBILITY_CHANGED)) {
-		dbus_error_init(&error);
-		if (!dbus_message_get_args(msg, &error,
-					DBUS_TYPE_STRING, &arg,
-					DBUS_TYPE_INVALID)) {
-			ERR("Cannot read message, cause: %s\n", error.message);
-			dbus_error_free(&error);
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-		}
-
-		__handle_ssid_visibility_changed(th, arg);
-		return DBUS_HANDLER_RESULT_HANDLED;
-	} else if (dbus_message_is_signal(msg, TETHERING_SERVICE_INTERFACE,
-				SIGNAL_NAME_PASSPHRASE_CHANGED)) {
-
-		__handle_passphrase_changed(th);
-		return DBUS_HANDLER_RESULT_HANDLED;
-	}
-
-	return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-}
-
-static void __wifi_enabled_cfm_cb(DBusGProxy *remoteobj, guint event, guint info,
-		GError *g_error, gpointer user_data)
-{
-	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
-
-	__tethering_h *th = (__tethering_h *)user_data;
-	tethering_enabled_cb ecb = th->enabled_cb[TETHERING_TYPE_WIFI];
-	void *data = th->enabled_user_data[TETHERING_TYPE_WIFI];
-	tethering_error_e error = __get_error(info);
-
-	if (g_error) {
-		ERR("DBus error [%s]\n", g_error->message);
-		if (g_error->code == DBUS_GERROR_NO_REPLY &&
-				++retry < TETHERING_ERROR_RECOVERY_MAX) {
-			g_error_free(g_error);
-			tethering_enable((tethering_h)th, TETHERING_TYPE_WIFI);
-			return;
-		}
-		g_error_free(g_error);
-		if (g_error->code == DBUS_GERROR_ACCESS_DENIED)
-			error = TETHERING_ERROR_PERMISSION_DENIED;
-		else
-			error = TETHERING_ERROR_OPERATION_FAILED;
-	}
-	retry = 0;
-
-	dbus_g_proxy_connect_signal(remoteobj, SIGNAL_NAME_WIFI_TETHER_ON,
-			G_CALLBACK(__handle_wifi_tether_on),
-			(gpointer)th, NULL);
-
-	if (!ecb)
-		return;
-
-	ecb(error, TETHERING_TYPE_WIFI, true, data);
-	return;
-}
-
-static void __bt_enabled_cfm_cb (DBusGProxy *remoteobj, guint event, guint info,
-		GError *g_error, gpointer user_data)
-{
-	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
-
-	__tethering_h *th = (__tethering_h *)user_data;
-	tethering_enabled_cb ecb = th->enabled_cb[TETHERING_TYPE_BT];
-	void *data = th->enabled_user_data[TETHERING_TYPE_BT];
-	tethering_error_e error = __get_error(info);
-
-	if (g_error) {
-		ERR("DBus error [%s]\n", g_error->message);
-		if (g_error->code == DBUS_GERROR_NO_REPLY &&
-				++retry < TETHERING_ERROR_RECOVERY_MAX) {
-			g_error_free(g_error);
-			tethering_enable((tethering_h)th, TETHERING_TYPE_BT);
-			return;
-		}
-		g_error_free(g_error);
-		if (g_error->code == DBUS_GERROR_ACCESS_DENIED)
-			error = TETHERING_ERROR_PERMISSION_DENIED;
-		else
-			error = TETHERING_ERROR_OPERATION_FAILED;
-	}
-	retry = 0;
-
-	dbus_g_proxy_connect_signal(remoteobj, SIGNAL_NAME_BT_TETHER_ON,
-			G_CALLBACK(__handle_bt_tether_on),
-			(gpointer)th, NULL);
-
-	if (!ecb)
-		return;
-
-	ecb(error, TETHERING_TYPE_BT, true, data);
-	return;
-}
-
-static void __usb_enabled_cfm_cb (DBusGProxy *remoteobj, guint event, guint info,
-		GError *g_error, gpointer user_data)
-{
-	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
-
-	__tethering_h *th = (__tethering_h *)user_data;
-	tethering_enabled_cb ecb = th->enabled_cb[TETHERING_TYPE_USB];
-	void *data = th->enabled_user_data[TETHERING_TYPE_USB];
-	tethering_error_e error = __get_error(info);
-
-	if (g_error) {
-		ERR("DBus error [%s]\n", g_error->message);
-		if (g_error->code == DBUS_GERROR_NO_REPLY &&
-				++retry < TETHERING_ERROR_RECOVERY_MAX) {
-			g_error_free(g_error);
-			tethering_enable((tethering_h)th, TETHERING_TYPE_USB);
-			return;
-		}
-		g_error_free(g_error);
-		if (g_error->code == DBUS_GERROR_ACCESS_DENIED)
-			error = TETHERING_ERROR_PERMISSION_DENIED;
-		else
-			error = TETHERING_ERROR_OPERATION_FAILED;
-	}
-	retry = 0;
-
-	dbus_g_proxy_connect_signal(remoteobj, SIGNAL_NAME_USB_TETHER_ON,
-			G_CALLBACK(__handle_usb_tether_on),
-			(gpointer)th, NULL);
-
-	if (!ecb)
-		return;
-
-	ecb(error, TETHERING_TYPE_USB, true, data);
-	return;
-}
-
-static void __wifi_ap_enabled_cfm_cb (DBusGProxy *remoteobj, guint event, guint info,
-		GError *g_error, gpointer user_data)
-{
-	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
-
-	__tethering_h *th = (__tethering_h *)user_data;
-	tethering_enabled_cb ecb = th->enabled_cb[TETHERING_TYPE_RESERVED];
-	void *data = th->enabled_user_data[TETHERING_TYPE_RESERVED];
-	tethering_error_e error = __get_error(info);
-
-	if (g_error) {
-		ERR("DBus error [%s]\n", g_error->message);
-		if (g_error->code == DBUS_GERROR_NO_REPLY &&
-				++retry < TETHERING_ERROR_RECOVERY_MAX) {
-			g_error_free(g_error);
-			tethering_enable((tethering_h)th, TETHERING_TYPE_RESERVED);
-			return;
-		}
-		g_error_free(g_error);
-		if (g_error->code == DBUS_GERROR_ACCESS_DENIED)
-			error = TETHERING_ERROR_PERMISSION_DENIED;
-		else
-			error = TETHERING_ERROR_OPERATION_FAILED;
-	}
-	retry = 0;
-
-	dbus_g_proxy_connect_signal(remoteobj, SIGNAL_NAME_WIFI_AP_ON,
-			G_CALLBACK(__handle_wifi_ap_on),
-			(gpointer)th, NULL);
-
-	if (!ecb)
-		return;
-
-	ecb(error, TETHERING_TYPE_RESERVED, true, data);
-	return;
-}
-
-static void __disabled_cfm_cb(DBusGProxy *remoteobj, guint event, guint info,
-		GError *g_error, gpointer user_data)
+static void __wifi_enabled_cfm_cb(GObject *source_object, GAsyncResult *res,
+		gpointer user_data)
 {
 	DBG("+\n");
 
 	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
+	GError *g_error = NULL;
+	GVariant *g_var;
+	guint info;
+	tethering_error_e error;
+	__tethering_h *th = (__tethering_h *)user_data;
+	tethering_enabled_cb ecb = th->enabled_cb[TETHERING_TYPE_WIFI];
+	void *data = th->enabled_user_data[TETHERING_TYPE_WIFI];
 
+	g_var  = g_dbus_proxy_call_finish(th->client_bus_proxy, res, &g_error);
+	if (g_error) {
+		ERR("DBus error [%s]\n", g_error->message);
+		if (g_error->code == G_DBUS_ERROR_NO_REPLY &&
+				++retry < TETHERING_ERROR_RECOVERY_MAX) {
+			g_error_free(g_error);
+			tethering_enable((tethering_h)th, TETHERING_TYPE_WIFI);
+			return;
+		} else if (g_error->code == G_DBUS_ERROR_ACCESS_DENIED)
+			error = TETHERING_ERROR_PERMISSION_DENIED;
+		else
+			error = TETHERING_ERROR_OPERATION_FAILED;
+		g_error_free(g_error);
+	} else {
+		g_variant_get(g_var, "(u)", &info);
+		error = __get_error(info);
+	}
+	retry = 0;
+
+	sigs[E_SIGNAL_WIFI_TETHER_ON].sig_id = g_dbus_connection_signal_subscribe(th->client_bus,
+			NULL, TETHERING_SERVICE_INTERFACE, sigs[E_SIGNAL_WIFI_TETHER_ON].name,
+			TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+			sigs[E_SIGNAL_WIFI_TETHER_ON].cb, (gpointer)th, NULL);
+
+	if (!ecb) {
+		DBG("-\n");
+		return;
+	}
+	ecb(error, TETHERING_TYPE_WIFI, true, data);
+	g_variant_unref(g_var);
+	DBG("-\n");
+}
+
+static void __bt_enabled_cfm_cb (GObject *source_object, GAsyncResult *res,
+		gpointer user_data)
+{
+	DBG("+\n");
+	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
+	GError *g_error = NULL;
+	GVariant *g_var;
+	guint info;
+	tethering_error_e error;
+
+	__tethering_h *th = (__tethering_h *)user_data;
+	tethering_enabled_cb ecb = th->enabled_cb[TETHERING_TYPE_BT];
+	void *data = th->enabled_user_data[TETHERING_TYPE_BT];
+
+	g_var  = g_dbus_proxy_call_finish(th->client_bus_proxy, res, &g_error);
+	if (g_error) {
+		ERR("DBus error [%s]\n", g_error->message);
+		if (g_error->code == G_DBUS_ERROR_NO_REPLY &&
+				++retry < TETHERING_ERROR_RECOVERY_MAX) {
+			g_error_free(g_error);
+			tethering_enable((tethering_h)th, TETHERING_TYPE_BT);
+			DBG("-\n");
+			return;
+		}
+		if (g_error->code == G_DBUS_ERROR_ACCESS_DENIED)
+			error = TETHERING_ERROR_PERMISSION_DENIED;
+		else
+			error = TETHERING_ERROR_OPERATION_FAILED;
+		g_error_free(g_error);
+	} else {
+		g_variant_get(g_var, "(u)", &info);
+		g_variant_unref(g_var);
+		error = __get_error(info);
+	}
+	retry = 0;
+
+	sigs[E_SIGNAL_BT_TETHER_ON].sig_id = g_dbus_connection_signal_subscribe(th->client_bus,
+			NULL, TETHERING_SERVICE_INTERFACE, sigs[E_SIGNAL_BT_TETHER_ON].name,
+			TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+			sigs[E_SIGNAL_BT_TETHER_ON].cb, (gpointer)th, NULL);
+
+	if (!ecb) {
+		DBG("-\n");
+		return;
+	}
+
+	ecb(error, TETHERING_TYPE_BT, true, data);
+	DBG("-\n");
+}
+
+static void __usb_enabled_cfm_cb (GObject *source_object, GAsyncResult *res,
+					gpointer user_data)
+{
+	DBG("+\n");
+
+	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
+	__tethering_h *th = (__tethering_h *)user_data;
+	GError *g_error = NULL;
+	GVariant *g_var;
+	guint info;
+	tethering_error_e error;
+	tethering_enabled_cb ecb = th->enabled_cb[TETHERING_TYPE_USB];
+	void *data = th->enabled_user_data[TETHERING_TYPE_USB];
+
+	g_var  = g_dbus_proxy_call_finish(th->client_bus_proxy, res, &g_error);
+	if (g_error) {
+		ERR("DBus error [%s]\n", g_error->message);
+		if (g_error->code == G_DBUS_ERROR_NO_REPLY &&
+				++retry < TETHERING_ERROR_RECOVERY_MAX) {
+			g_error_free(g_error);
+			tethering_enable((tethering_h)th, TETHERING_TYPE_USB);
+			DBG("-\n");
+			return;
+		}
+		if (g_error->code == G_DBUS_ERROR_ACCESS_DENIED)
+			error = TETHERING_ERROR_PERMISSION_DENIED;
+		else
+			error = TETHERING_ERROR_OPERATION_FAILED;
+		g_error_free(g_error);
+	} else {
+		g_variant_get(g_var, "(u)", &info);
+		g_variant_unref(g_var);
+		error = __get_error(info);
+	}
+	retry = 0;
+
+	sigs[E_SIGNAL_USB_TETHER_ON].sig_id = g_dbus_connection_signal_subscribe(th->client_bus,
+			NULL, TETHERING_SERVICE_INTERFACE, sigs[E_SIGNAL_USB_TETHER_ON].name,
+			TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+			sigs[E_SIGNAL_USB_TETHER_ON].cb, (gpointer)th, NULL);
+
+	if (!ecb) {
+		DBG("-\n");
+		return;
+	}
+
+	ecb(error, TETHERING_TYPE_USB, true, data);
+	DBG("-\n");
+}
+
+static void __wifi_ap_enabled_cfm_cb (GObject *source_object, GAsyncResult *res,
+		gpointer user_data)
+{
+	DBG("+\n");
+
+	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
+	__tethering_h *th = (__tethering_h *)user_data;
+	GError *g_error = NULL;
+	GVariant *g_var;
+	guint info;
+	tethering_error_e error;
+	tethering_enabled_cb ecb = th->enabled_cb[TETHERING_TYPE_RESERVED];
+	void *data = th->enabled_user_data[TETHERING_TYPE_RESERVED];
+
+	g_var  = g_dbus_proxy_call_finish(th->client_bus_proxy, res, &g_error);
+	if (g_error) {
+		ERR("DBus error [%s]\n", g_error->message);
+		if (g_error->code == G_DBUS_ERROR_NO_REPLY &&
+				++retry < TETHERING_ERROR_RECOVERY_MAX) {
+			g_error_free(g_error);
+			tethering_enable((tethering_h)th, TETHERING_TYPE_RESERVED);
+			DBG("-\n");
+			return;
+		}
+		if (g_error->code == G_DBUS_ERROR_ACCESS_DENIED)
+			error = TETHERING_ERROR_PERMISSION_DENIED;
+		else
+			error = TETHERING_ERROR_OPERATION_FAILED;
+		g_error_free(g_error);
+	} else {
+		g_variant_get(g_var, "(u)", &info);
+		g_variant_unref(g_var);
+		error = __get_error(info);
+	}
+	retry = 0;
+
+	sigs[E_SIGNAL_WIFI_AP_ON].sig_id = g_dbus_connection_signal_subscribe(th->client_bus,
+			NULL, TETHERING_SERVICE_INTERFACE, sigs[E_SIGNAL_WIFI_AP_ON].name,
+			TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+			sigs[E_SIGNAL_WIFI_AP_ON].cb, (gpointer)th, NULL);
+
+	if (!ecb) {
+		DBG("-\n");
+		return;
+	}
+
+	ecb(error, TETHERING_TYPE_RESERVED, true, data);
+	DBG("-\n");
+}
+
+static void __disabled_cfm_cb(GObject *source_object, GAsyncResult *res,
+		gpointer user_data)
+{
+	DBG("+\n");
+
+	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
+	GError *g_error = NULL;
+	GVariant *g_var;
+	guint info, event_type;
+	tethering_error_e error;
+	tethering_type_e type;
 	tethering_h tethering = (tethering_h)user_data;
 	__tethering_h *th = (__tethering_h *)tethering;
-
-	tethering_type_e type;
-	tethering_error_e error = __get_error(info);
 	tethering_disabled_cause_e code = TETHERING_DISABLED_BY_REQUEST;
-
 	tethering_disabled_cb dcb = NULL;
 	void *data = NULL;
 
-	DBG("cfm event : %d info : %d\n", event, info);
-
+	g_var  = g_dbus_proxy_call_finish(th->client_bus_proxy, res, &g_error);
 	if (g_error) {
 		ERR("DBus error [%s]\n", g_error->message);
 		g_error_free(g_error);
 		return;
 	}
-
-	switch (event) {
+	g_variant_get(g_var, "(uu)", &event_type, &info);
+	DBG("cfm event : %d info : %d\n", event_type, info);
+	g_variant_unref(g_var);
+	error = __get_error(info);
+	DBG("cfm event : %d info : %d\n", event_type, error);
+	switch (event_type) {
 	case MOBILE_AP_DISABLE_WIFI_TETHERING_CFM:
-		dbus_g_proxy_connect_signal(th->client_bus_proxy,
-				SIGNAL_NAME_WIFI_TETHER_OFF,
-				G_CALLBACK(__handle_wifi_tether_off),
-				(gpointer)tethering, NULL);
+		sigs[E_SIGNAL_WIFI_TETHER_OFF].sig_id = g_dbus_connection_signal_subscribe(th->client_bus,
+				NULL, TETHERING_SERVICE_INTERFACE, sigs[E_SIGNAL_WIFI_TETHER_OFF].name,
+				TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+				sigs[E_SIGNAL_WIFI_TETHER_OFF].cb, (gpointer)th, NULL);
 
 		type = TETHERING_TYPE_WIFI;
 		dcb = th->disabled_cb[type];
@@ -993,10 +1079,10 @@ static void __disabled_cfm_cb(DBusGProxy *remoteobj, guint event, guint info,
 		break;
 
 	case MOBILE_AP_DISABLE_BT_TETHERING_CFM:
-		dbus_g_proxy_connect_signal(th->client_bus_proxy,
-				SIGNAL_NAME_BT_TETHER_OFF,
-				G_CALLBACK(__handle_bt_tether_off),
-				(gpointer)tethering, NULL);
+		sigs[E_SIGNAL_BT_TETHER_OFF].sig_id = g_dbus_connection_signal_subscribe(th->client_bus,
+				NULL, TETHERING_SERVICE_INTERFACE, sigs[E_SIGNAL_BT_TETHER_OFF].name,
+				TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+				sigs[E_SIGNAL_BT_TETHER_OFF].cb, (gpointer)th, NULL);
 
 		type = TETHERING_TYPE_BT;
 		dcb = th->disabled_cb[type];
@@ -1006,10 +1092,10 @@ static void __disabled_cfm_cb(DBusGProxy *remoteobj, guint event, guint info,
 		break;
 
 	case MOBILE_AP_DISABLE_USB_TETHERING_CFM:
-		dbus_g_proxy_connect_signal(th->client_bus_proxy,
-				SIGNAL_NAME_USB_TETHER_OFF,
-				G_CALLBACK(__handle_usb_tether_off),
-				(gpointer)tethering, NULL);
+		sigs[E_SIGNAL_USB_TETHER_OFF].sig_id = g_dbus_connection_signal_subscribe(th->client_bus,
+				NULL, TETHERING_SERVICE_INTERFACE, sigs[E_SIGNAL_USB_TETHER_OFF].name,
+				TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+				sigs[E_SIGNAL_USB_TETHER_OFF].cb, (gpointer)th, NULL);
 
 		type = TETHERING_TYPE_USB;
 		dcb = th->disabled_cb[type];
@@ -1019,10 +1105,10 @@ static void __disabled_cfm_cb(DBusGProxy *remoteobj, guint event, guint info,
 		break;
 
 	case MOBILE_AP_DISABLE_WIFI_AP_CFM:
-		dbus_g_proxy_connect_signal(th->client_bus_proxy,
-				SIGNAL_NAME_WIFI_AP_OFF,
-				G_CALLBACK(__handle_wifi_ap_off),
-				(gpointer)tethering, NULL);
+		sigs[E_SIGNAL_WIFI_AP_OFF].sig_id = g_dbus_connection_signal_subscribe(th->client_bus,
+				NULL, TETHERING_SERVICE_INTERFACE, sigs[E_SIGNAL_WIFI_AP_OFF].name,
+				TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+				sigs[E_SIGNAL_WIFI_AP_OFF].cb, (gpointer)th, NULL);
 
 		type = TETHERING_TYPE_RESERVED;
 		dcb = th->disabled_cb[type];
@@ -1032,18 +1118,19 @@ static void __disabled_cfm_cb(DBusGProxy *remoteobj, guint event, guint info,
 		break;
 
 	case MOBILE_AP_DISABLE_CFM:
-		dbus_g_proxy_connect_signal(th->client_bus_proxy,
-				SIGNAL_NAME_USB_TETHER_OFF,
-				G_CALLBACK(__handle_usb_tether_off),
-				(gpointer)tethering, NULL);
-		dbus_g_proxy_connect_signal(th->client_bus_proxy,
-				SIGNAL_NAME_WIFI_TETHER_OFF,
-				G_CALLBACK(__handle_wifi_tether_off),
-				(gpointer)tethering, NULL);
-		dbus_g_proxy_connect_signal(th->client_bus_proxy,
-				SIGNAL_NAME_BT_TETHER_OFF,
-				G_CALLBACK(__handle_bt_tether_off),
-				(gpointer)tethering, NULL);
+
+		sigs[E_SIGNAL_WIFI_TETHER_OFF].sig_id = g_dbus_connection_signal_subscribe(th->client_bus,
+				NULL, TETHERING_SERVICE_INTERFACE, sigs[E_SIGNAL_WIFI_TETHER_OFF].name,
+				TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+				sigs[E_SIGNAL_WIFI_TETHER_OFF].cb, (gpointer)th, NULL);
+		sigs[E_SIGNAL_BT_TETHER_OFF].sig_id = g_dbus_connection_signal_subscribe(th->client_bus,
+				NULL, TETHERING_SERVICE_INTERFACE, sigs[E_SIGNAL_BT_TETHER_OFF].name,
+				TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+				sigs[E_SIGNAL_BT_TETHER_OFF].cb, (gpointer)th, NULL);
+		sigs[E_SIGNAL_USB_TETHER_OFF].sig_id = g_dbus_connection_signal_subscribe(th->client_bus,
+				NULL, TETHERING_SERVICE_INTERFACE, sigs[E_SIGNAL_USB_TETHER_OFF].name,
+				TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+				sigs[E_SIGNAL_USB_TETHER_OFF].cb, (gpointer)th, NULL);
 
 		for (type = TETHERING_TYPE_USB; type <= TETHERING_TYPE_BT; type++) {
 			dcb = th->disabled_cb[type];
@@ -1057,162 +1144,164 @@ static void __disabled_cfm_cb(DBusGProxy *remoteobj, guint event, guint info,
 
 	default:
 		ERR("Invalid event\n");
-		return;
+		break;
 	}
-
-	return;
+	DBG("-\n");
 }
 
-static void __get_data_usage_cb(DBusGProxy *remoteobj, guint event,
-		guint64 tx_bytes, guint64 rx_bytes,
-		GError *error, gpointer user_data)
+static void __get_data_usage_cb(GObject *source_object, GAsyncResult *res,
+				gpointer user_data)
 {
+	DBG("+\n");
+
 	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
 
+	GError *g_error = NULL;
+	GVariant *g_var;
+	guint event_type;
+	guint64 tx_bytes, rx_bytes;
 	__tethering_h *th = (__tethering_h *)user_data;
 	tethering_error_e tethering_error = TETHERING_ERROR_NONE;
+	bool flag = false;
 
+	g_var = g_dbus_proxy_call_finish(th->client_bus_proxy, res, &g_error);
+	if (g_error) {
+		ERR("DBus fail [%s]\n", g_error->message);
+		if (g_error->code == G_DBUS_ERROR_ACCESS_DENIED)
+			tethering_error = TETHERING_ERROR_PERMISSION_DENIED;
+		else
+			tethering_error = TETHERING_ERROR_OPERATION_FAILED;
+
+		flag = true;
+	}
 	if (th->data_usage_cb == NULL) {
 		ERR("There is no data_usage_cb\n");
 		return;
 	}
-
-	if (error || event != MOBILE_AP_GET_DATA_PACKET_USAGE_CFM) {
-		if (error)  {
-			ERR("DBus fail [%s]\n", error->message);
-			g_error_free(error);
-			if (error->code == DBUS_GERROR_ACCESS_DENIED)
-				tethering_error = TETHERING_ERROR_PERMISSION_DENIED;
-			else
-				tethering_error = TETHERING_ERROR_OPERATION_FAILED;
-		}
-
-		th->data_usage_cb(tethering_error,
-				0LL, 0LL, th->data_usage_user_data);
-
-		th->data_usage_cb = NULL;
-		th->data_usage_user_data = NULL;
-
-		return;
-	}
-
-	th->data_usage_cb(TETHERING_ERROR_NONE,
+	if (flag) {
+		th->data_usage_cb(tethering_error, 0LL, 0LL, th->data_usage_user_data);
+	} else {
+		g_variant_get(g_var, "(utt)", &event_type, &tx_bytes, &rx_bytes);
+		th->data_usage_cb(TETHERING_ERROR_NONE,
 			rx_bytes, tx_bytes, th->data_usage_user_data);
-
+		g_variant_unref(g_var);
+	}
 	th->data_usage_cb = NULL;
 	th->data_usage_user_data = NULL;
 
-	return;
+	DBG("-\n");
 }
 
-static void __settings_reloaded_cb(DBusGProxy *remoteobj, guint result,
-		GError *error, gpointer user_data)
+static void __settings_reloaded_cb(GObject *source_object, GAsyncResult *res,
+		gpointer user_data)
 {
+	DBG("+\n");
+
 	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
-
+	GError *g_error = NULL;
+	GVariant *g_var;
+	guint info;
 	__tethering_h *th = (__tethering_h *)user_data;
-	tethering_error_e tethering_error = __get_error(result);
+	tethering_error_e tethering_error;
 
-	if (th->settings_reloaded_cb == NULL) {
-		DBG("There is no settings_reloaded_cb\n");
-		return;
-	}
-
-	if (error) {
-		ERR("DBus fail [%s]\n", error->message);
-		g_error_free(error);
-		if (error->code == DBUS_GERROR_ACCESS_DENIED)
+	g_var  = g_dbus_proxy_call_finish(th->client_bus_proxy, res, &g_error);
+	if (g_error) {
+		ERR("DBus fail [%s]\n", g_error->message);
+		if (g_error->code == G_DBUS_ERROR_ACCESS_DENIED)
 			tethering_error = TETHERING_ERROR_PERMISSION_DENIED;
 		else
 			tethering_error = TETHERING_ERROR_OPERATION_FAILED;
+		g_error_free(g_error);
 	}
+	if (th->settings_reloaded_cb == NULL) {
+		DBG("There is no settings_reloaded_cb\n-\n");
+		return;
+	}
+	g_variant_get(g_var, "(u)", &info);
+	tethering_error = __get_error(info);
+	g_variant_unref(g_var);
 
 	th->settings_reloaded_cb(tethering_error,
 			th->settings_reloaded_user_data);
 
 	th->settings_reloaded_cb = NULL;
 	th->settings_reloaded_user_data = NULL;
-
-	return;
+	DBG("-\n");
 }
 
-static void __ap_settings_reloaded_cb(DBusGProxy *remoteobj, guint result,
-		GError *error, gpointer user_data)
+static void __ap_settings_reloaded_cb(GObject *source_object, GAsyncResult *res,
+		gpointer user_data)
 {
+	DBG("+\n");
+
 	_retm_if(user_data == NULL, "parameter(user_data) is NULL\n");
-
+	GError *g_error = NULL;
+	GVariant *g_var;
+	guint info;
 	__tethering_h *th = (__tethering_h *)user_data;
-	tethering_error_e tethering_error = __get_error(result);
+	tethering_error_e tethering_error;
 
-	if (th->ap_settings_reloaded_cb == NULL) {
-		DBG("There is no settings_reloaded_cb\n");
-		return;
-	}
-
-	if (error) {
-		ERR("DBus fail [%s]\n", error->message);
-		g_error_free(error);
-		if (error->code == DBUS_GERROR_ACCESS_DENIED)
+	g_var  = g_dbus_proxy_call_finish(th->client_bus_proxy, res, &g_error);
+	if (g_error) {
+		ERR("DBus fail [%s]\n", g_error->message);
+		if (g_error->code == G_DBUS_ERROR_ACCESS_DENIED)
 			tethering_error = TETHERING_ERROR_PERMISSION_DENIED;
 		else
 			tethering_error = TETHERING_ERROR_OPERATION_FAILED;
+		g_error_free(g_error);
 	}
+	if (th->ap_settings_reloaded_cb == NULL) {
+		DBG("There is no settings_reloaded_cb\n-\n");
+		return;
+	}
+	g_variant_get(g_var, "(u)", &info);
+	tethering_error = __get_error(info);
+	g_variant_unref(g_var);
 
 	th->ap_settings_reloaded_cb(tethering_error,
 			th->ap_settings_reloaded_user_data);
 
 	th->ap_settings_reloaded_cb = NULL;
 	th->ap_settings_reloaded_user_data = NULL;
-
-	return;
+	DBG("-\n");
 }
 
 static void __connect_signals(tethering_h tethering)
 {
+	DBG("+\n");
 	_retm_if(tethering == NULL, "parameter(tethering) is NULL\n");
 
 	__tethering_h *th = (__tethering_h *)tethering;
-	DBusGProxy *proxy = th->client_bus_proxy;
+	GDBusConnection *connection = th->client_bus;
 	int i = 0;
 
-	for (i = 0; sigs[i].cb != NULL; i++) {
-		dbus_g_proxy_add_signal(proxy, sigs[i].name,
-				G_TYPE_STRING, G_TYPE_INVALID);
-		dbus_g_proxy_connect_signal(proxy, sigs[i].name,
-				G_CALLBACK(sigs[i].cb), (gpointer)tethering, NULL);
+	for (i = E_SIGNAL_NET_CLOSED; i < E_SIGNAL_MAX; i++) {
+		sigs[i].sig_id = g_dbus_connection_signal_subscribe(connection,
+				NULL, TETHERING_SERVICE_INTERFACE, sigs[i].name,
+				TETHERING_SERVICE_OBJECT_PATH, NULL, G_DBUS_SIGNAL_FLAGS_NONE,
+				sigs[i].cb, tethering, NULL);
 	}
-
-	dbus_g_object_register_marshaller(marshal_VOID__STRING_UINT_STRING_STRING_STRING_UINT,
-			G_TYPE_NONE, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_STRING,
-			G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_INVALID);
-	dbus_g_proxy_add_signal(proxy, SIGNAL_NAME_DHCP_STATUS,
-			G_TYPE_STRING, G_TYPE_UINT, G_TYPE_STRING,
-			G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_INVALID);
-	dbus_g_proxy_connect_signal(proxy, SIGNAL_NAME_DHCP_STATUS,
-			G_CALLBACK(__handle_dhcp), (gpointer)tethering, NULL);
-
-	return;
+	DBG("-\n");
 }
 
 static void __disconnect_signals(tethering_h tethering)
 {
+	DBG("+\n");
+
 	_retm_if(tethering == NULL, "parameter(tethering) is NULL\n");
 
 	__tethering_h *th = (__tethering_h *)tethering;
-	DBusGProxy *proxy = th->client_bus_proxy;
+	GDBusConnection *connection = th->client_bus;
 
 	int i = 0;
 
-	for (i = 0; sigs[i].cb != NULL; i++) {
-		dbus_g_proxy_disconnect_signal(proxy, sigs[i].name,
-				G_CALLBACK(sigs[i].cb), (gpointer)tethering);
+	for (i = E_SIGNAL_NET_CLOSED; i < E_SIGNAL_MAX; i++) {
+		g_dbus_connection_signal_unsubscribe(connection, sigs[i].sig_id);
 	}
-
-	dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_DHCP_STATUS,
-			G_CALLBACK(__handle_dhcp), (gpointer)tethering);
-
-	return;
+	DBG("-\n");
 }
+
+
 
 static bool __get_intf_name(tethering_type_e type, char *buf, unsigned int len)
 {
@@ -1239,7 +1328,6 @@ static bool __get_intf_name(tethering_type_e type, char *buf, unsigned int len)
 		ERR("Not supported type : %d\n", type);
 		return false;
 	}
-
 	return true;
 }
 
@@ -1268,21 +1356,25 @@ static bool __get_gateway_addr(tethering_type_e type, char *buf, unsigned int le
 		ERR("Not supported type : %d\n", type);
 		return false;
 	}
-
 	return true;
 }
 
 static int __get_common_ssid(char *ssid, unsigned int size)
 {
-	if (ssid == NULL)
+	if (ssid == NULL) {
+		ERR("ssid is null\n");
 		return TETHERING_ERROR_INVALID_PARAMETER;
+	}
 
 	char *ptr = NULL;
 	char *ptr_tmp = NULL;
 
 	ptr = vconf_get_str(VCONFKEY_SETAPPL_DEVICE_NAME_STR);
-	if (ptr == NULL)
+	if (ptr == NULL) {
+		ERR("vconf_get_str is failed\n");
+		DBG("-\n");
 		return TETHERING_ERROR_OPERATION_FAILED;
+	}
 
 	g_strlcpy(ssid, ptr, size);
 	free(ptr);
@@ -1295,11 +1387,13 @@ static int __get_common_ssid(char *ssid, unsigned int size)
 
 static int __prepare_wifi_settings(tethering_h tethering, _softap_settings_t *set)
 {
+	DBG("+\n");
+
 	__tethering_h *th = (__tethering_h *)tethering;
 	tethering_error_e ret = TETHERING_ERROR_NONE;
 
 	if (th == NULL || set == NULL) {
-		ERR("null parameter\n");
+		ERR("null parameter\n-\n");
 		return TETHERING_ERROR_INVALID_PARAMETER;
 	}
 
@@ -1332,12 +1426,14 @@ static int __prepare_wifi_settings(tethering_h tethering, _softap_settings_t *se
 		}
 		g_strlcpy(set->key, pass, sizeof(set->key));
 	}
-
+	DBG("-\n");
 	return TETHERING_ERROR_NONE;
 }
 
 static int __prepare_wifi_ap_settings(tethering_h tethering, _softap_settings_t *set)
 {
+	DBG("+\n");
+
 	__tethering_h *th = (__tethering_h *)tethering;
 
 	if (th == NULL || set == NULL) {
@@ -1354,7 +1450,7 @@ static int __prepare_wifi_ap_settings(tethering_h tethering, _softap_settings_t 
 	} else {
 		g_strlcpy(set->key, th->passphrase, sizeof(set->key));
 	}
-
+	DBG("-\n");
 	return TETHERING_ERROR_NONE;
 }
 
@@ -1407,12 +1503,13 @@ static bool __check_precondition(tethering_type_e type)
  */
 API int tethering_create(tethering_h *tethering)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
+	DBG("+\n");
 
 	__tethering_h *th = NULL;
 	GError *error = NULL;
-	DBusError dbus_error;
 	char ssid[TETHERING_WIFI_SSID_MAX_LEN + 1] = {0, };
 
 	th = (__tethering_h *)malloc(sizeof(__tethering_h));
@@ -1446,63 +1543,37 @@ API int tethering_create(tethering_h *tethering)
 #if !GLIB_CHECK_VERSION(2,36,0)
 	g_type_init();
 #endif
-
-	th->client_bus = dbus_g_bus_get(DBUS_BUS_SYSTEM, &error);
+	GCancellable *cancellable = g_cancellable_new();
+	th->client_bus = g_bus_get_sync(DBUS_BUS_SYSTEM, cancellable, &error);
 	if (error) {
 		ERR("Couldn't connect to the System bus[%s]", error->message);
 		g_error_free(error);
+		g_cancellable_cancel(cancellable);
+		g_object_unref(cancellable);
 		g_free(th->ap_ssid);
 		free(th);
 		return TETHERING_ERROR_OPERATION_FAILED;
 	}
+	th->cancellable = cancellable;
 
-	th->client_bus_proxy = dbus_g_proxy_new_for_name(th->client_bus,
-			TETHERING_SERVICE_NAME,
-			TETHERING_SERVICE_OBJECT_PATH,
-			TETHERING_SERVICE_INTERFACE);
+	th->client_bus_proxy = g_dbus_proxy_new_sync(th->client_bus, G_DBUS_PROXY_FLAGS_NONE,
+			NULL, TETHERING_SERVICE_NAME, TETHERING_SERVICE_OBJECT_PATH,
+			TETHERING_SERVICE_INTERFACE, th->cancellable, &error);
 	if (!th->client_bus_proxy) {
-		ERR("Couldn't create the proxy object");
-		dbus_g_connection_unref(th->client_bus);
+		ERR("Couldn't create the proxy object because of %s\n", error->message);
+		g_cancellable_cancel(th->cancellable);
+		g_object_unref(th->cancellable);
+		g_object_unref(th->client_bus);
 		g_free(th->ap_ssid);
 		free(th);
 		return TETHERING_ERROR_OPERATION_FAILED;
-	}
-
-	th->client_bus_connection = dbus_g_connection_get_connection(th->client_bus);
-
-	dbus_error_init(&dbus_error);
-	dbus_bus_add_match(th->client_bus_connection,
-			TETHERING_SIGNAL_MATCH_RULE, &dbus_error);
-	if (dbus_error_is_set(&dbus_error)) {
-		ERR("Cannot add D-BUS match rule, cause: %s", dbus_error.message);
-		dbus_error_free(&dbus_error);
-
-		g_object_unref(th->client_bus_proxy);
-		dbus_g_connection_unref(th->client_bus);
-		g_free(th->ap_ssid);
-		free(th);
-		return TETHERING_ERROR_OPERATION_FAILED;
-	}
-
-	if (dbus_connection_add_filter(th->client_bus_connection,
-				__handle_signal_filter, th, NULL) == FALSE) {
-		ERR("Cannot add D-BUS filter\n");
-
-		dbus_bus_remove_match(th->client_bus_connection,
-				TETHERING_SIGNAL_MATCH_RULE, NULL);
-		g_object_unref(th->client_bus_proxy);
-		dbus_g_connection_unref(th->client_bus);
-		g_free(th->ap_ssid);
-		free(th);
-		return TETHERING_ERROR_OPERATION_FAILED;
-
 	}
 
 	__connect_signals((tethering_h)th);
 
 	*tethering = (tethering_h)th;
 	DBG("Tethering Handle : 0x%X\n", th);
-
+	DBG("-\n");
 	return TETHERING_ERROR_NONE;
 }
 
@@ -1520,6 +1591,8 @@ API int tethering_create(tethering_h *tethering)
  */
 API int tethering_destroy(tethering_h tethering)
 {
+	DBG("+\n");
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 
@@ -1528,21 +1601,18 @@ API int tethering_destroy(tethering_h tethering)
 	DBG("Tethering Handle : 0x%X\n", th);
 	__disconnect_signals(tethering);
 
-	dbus_connection_remove_filter(th->client_bus_connection,
-			__handle_signal_filter, th);
-	dbus_bus_remove_match(th->client_bus_connection,
-			TETHERING_SIGNAL_MATCH_RULE, NULL);
-
 	if (th->ssid)
 		free(th->ssid);
 	if (th->ap_ssid)
 		free(th->ap_ssid);
 
+	g_object_unref(th->cancellable);
 	g_object_unref(th->client_bus_proxy);
-	dbus_g_connection_unref(th->client_bus);
+	g_object_unref(th->client_bus);
 	memset(th, 0x00, sizeof(__tethering_h));
 	free(th);
 
+	DBG("-\n");
 	return TETHERING_ERROR_NONE;
 }
 
@@ -1564,27 +1634,35 @@ API int tethering_destroy(tethering_h tethering)
 API int tethering_enable(tethering_h tethering, tethering_type_e type)
 {
 	DBG("+ type :  %d\n", type);
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_BT_FEATURE);
 
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 
 	tethering_error_e ret = TETHERING_ERROR_NONE;
 	__tethering_h *th = (__tethering_h *)tethering;
-	DBusGProxy *proxy = th->client_bus_proxy;
+	GDBusProxy *proxy = th->client_bus_proxy;
+	GDBusConnection *connection = th->client_bus;
 
-	dbus_g_proxy_set_default_timeout(proxy, DBUS_TIMEOUT_INFINITE);
+	g_dbus_proxy_set_default_timeout(proxy, DBUS_TIMEOUT_INFINITE);
 
 	if(type != TETHERING_TYPE_RESERVED
-		&& __check_precondition(type) == FALSE)
-    	return TETHERING_ERROR_OPERATION_FAILED;
+		&& __check_precondition(type) == FALSE) {
+		DBG("-\n");
+		return TETHERING_ERROR_OPERATION_FAILED;
+	}
 
 	switch (type) {
 	case TETHERING_TYPE_USB:
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_USB_TETHER_ON,
-				G_CALLBACK(__handle_usb_tether_on),
-				(gpointer)tethering);
-		org_tizen_tethering_enable_usb_tethering_async(proxy,
-				__usb_enabled_cfm_cb, (gpointer)tethering);
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_USB_TETHER_ON].sig_id);
+
+		g_dbus_proxy_call(proxy, "enable_usb_tethering", NULL,
+				G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __usb_enabled_cfm_cb, (gpointer)tethering);
 		break;
 
 	case TETHERING_TYPE_WIFI: {
@@ -1593,25 +1671,26 @@ API int tethering_enable(tethering_h tethering, tethering_type_e type)
 		ret = __prepare_wifi_settings(tethering, &set);
 		if (ret != TETHERING_ERROR_NONE) {
 			ERR("softap settings initialization failed\n");
+			DBG("-\n");
 			return TETHERING_ERROR_OPERATION_FAILED;
 		}
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_WIFI_TETHER_ON].sig_id);
 
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_WIFI_TETHER_ON,
-				G_CALLBACK(__handle_wifi_tether_on),
-				(gpointer)tethering);
-
-		org_tizen_tethering_enable_wifi_tethering_async(proxy,
-				set.ssid, set.key, set.visibility, set.sec_type,
-				__wifi_enabled_cfm_cb, (gpointer)tethering);
+		g_dbus_proxy_call(proxy, "enable_wifi_tethering",
+				g_variant_new("(ssii)", set.ssid, set.key, set.visibility, set.sec_type),
+				G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __wifi_enabled_cfm_cb, (gpointer)tethering);
 		break;
 	}
 
 	case TETHERING_TYPE_BT:
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_BT_TETHER_ON,
-				G_CALLBACK(__handle_bt_tether_on),
-				(gpointer)tethering);
-		org_tizen_tethering_enable_bt_tethering_async(proxy,
-				__bt_enabled_cfm_cb, (gpointer)tethering);
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_BT_TETHER_ON].sig_id);
+
+		g_dbus_proxy_call(proxy, "enable_bt_tethering", NULL,
+				G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __bt_enabled_cfm_cb, (gpointer)tethering);
 
 		break;
 
@@ -1624,13 +1703,12 @@ API int tethering_enable(tethering_h tethering, tethering_type_e type)
 			return TETHERING_ERROR_OPERATION_FAILED;
 		}
 
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_WIFI_AP_ON,
-				G_CALLBACK(__handle_wifi_ap_on),
-				(gpointer)tethering);
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_WIFI_AP_ON].sig_id);
 
-		org_tizen_tethering_enable_wifi_ap_async(proxy,
-				set.ssid, set.key, set.visibility, set.sec_type,
-				__wifi_ap_enabled_cfm_cb, (gpointer)tethering);
+		g_dbus_proxy_call(proxy, "enable_wifi_ap",
+				g_variant_new("(ssii)", set.ssid, set.key, set.visibility, set.sec_type),
+				G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable, (GAsyncReadyCallback) __wifi_ap_enabled_cfm_cb, (gpointer)tethering);
 		break;
 	}
 	case TETHERING_TYPE_ALL: {
@@ -1643,39 +1721,42 @@ API int tethering_enable(tethering_h tethering, tethering_type_e type)
 		}
 
 		/* TETHERING_TYPE_USB */
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_USB_TETHER_ON,
-				G_CALLBACK(__handle_usb_tether_on),
-				(gpointer)tethering);
-		org_tizen_tethering_enable_usb_tethering_async(proxy,
-				__usb_enabled_cfm_cb, (gpointer)tethering);
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_USB_TETHER_ON].sig_id);
+
+		g_dbus_proxy_call(proxy, "enable_usb_tethering", NULL,
+				G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __usb_enabled_cfm_cb, (gpointer)tethering);
 
 		/* TETHERING_TYPE_WIFI */
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_WIFI_TETHER_ON,
-				G_CALLBACK(__handle_wifi_tether_on),
-				(gpointer)tethering);
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_WIFI_TETHER_ON].sig_id);
 
-		org_tizen_tethering_enable_wifi_tethering_async(proxy,
-				set.ssid, set.key, set.visibility, set.sec_type,
-				__wifi_enabled_cfm_cb, (gpointer)tethering);
+		g_dbus_proxy_call(proxy, "enable_wifi_tethering",
+				g_variant_new("(ssii)", set.ssid, set.key, set.visibility, set.sec_type),
+				G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __wifi_enabled_cfm_cb, (gpointer)tethering);
 
 		/* TETHERING_TYPE_BT */
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_BT_TETHER_ON,
-				G_CALLBACK(__handle_bt_tether_on),
-				(gpointer)tethering);
-		org_tizen_tethering_enable_bt_tethering_async(proxy,
-				__bt_enabled_cfm_cb, (gpointer)tethering);
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_BT_TETHER_ON].sig_id);
+
+		g_dbus_proxy_call(proxy, "enable_usb_tethering", NULL,
+				G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __bt_enabled_cfm_cb, (gpointer)tethering);
 		break;
 	}
 	default:
 		ERR("Unknown type : %d\n", type);
 
-		dbus_g_proxy_set_default_timeout(proxy, DBUS_TIMEOUT_USE_DEFAULT);
+		g_dbus_proxy_set_default_timeout(proxy, DBUS_TIMEOUT_USE_DEFAULT);
 
+		DBG("-\n");
 		return TETHERING_ERROR_INVALID_PARAMETER;
 	}
 
-	dbus_g_proxy_set_default_timeout(proxy, DBUS_TIMEOUT_USE_DEFAULT);
-
+	g_dbus_proxy_set_default_timeout(proxy, DBUS_TIMEOUT_USE_DEFAULT);
+	DBG("-\n");
 	return TETHERING_ERROR_NONE;
 }
 
@@ -1697,72 +1778,86 @@ API int tethering_enable(tethering_h tethering, tethering_type_e type)
 API int tethering_disable(tethering_h tethering, tethering_type_e type)
 {
 	DBG("+ type :  %d\n", type);
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
 
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 
 	__tethering_h *th = (__tethering_h *)tethering;
-	DBusGProxy *proxy = th->client_bus_proxy;
+	GDBusProxy *proxy = th->client_bus_proxy;
+	GDBusConnection *connection = th->client_bus;
 
 	switch (type) {
 	case TETHERING_TYPE_USB:
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_USB_TETHER_OFF,
-				G_CALLBACK(__handle_usb_tether_off),
-				(gpointer)tethering);
-		org_tizen_tethering_disable_usb_tethering_async(proxy,
-				__disabled_cfm_cb, (gpointer)tethering);
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_USB_TETHER_OFF].sig_id);
+
+		g_dbus_proxy_call(proxy, "disable_usb_tethering",
+				NULL, G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __disabled_cfm_cb, (gpointer)tethering);
+
 		break;
 
 	case TETHERING_TYPE_WIFI:
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_WIFI_TETHER_OFF,
-				G_CALLBACK(__handle_wifi_tether_off),
-				(gpointer)tethering);
-		org_tizen_tethering_disable_wifi_tethering_async(proxy,
-				__disabled_cfm_cb, (gpointer)tethering);
+
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_WIFI_TETHER_OFF].sig_id);
+
+		g_dbus_proxy_call(proxy, "disable_wifi_tethering",
+				NULL, G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __disabled_cfm_cb, (gpointer)tethering);
 		break;
 
 	case TETHERING_TYPE_BT:
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_BT_TETHER_OFF,
-				G_CALLBACK(__handle_bt_tether_off),
-				(gpointer)tethering);
-		org_tizen_tethering_disable_bt_tethering_async(proxy,
-				__disabled_cfm_cb, (gpointer)tethering);
+
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_BT_TETHER_OFF].sig_id);
+
+		g_dbus_proxy_call(proxy, "disable_bt_tethering",
+				NULL, G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __disabled_cfm_cb, (gpointer)tethering);
 		break;
 
 	case TETHERING_TYPE_RESERVED:
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_WIFI_AP_OFF,
-				G_CALLBACK(__handle_wifi_ap_off),
-				(gpointer)tethering);
-		org_tizen_tethering_disable_wifi_ap_async(proxy,
-				__disabled_cfm_cb, (gpointer)tethering);
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_WIFI_AP_OFF].sig_id);
+
+		g_dbus_proxy_call(proxy, "disable_wifi_ap",
+				NULL, G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __disabled_cfm_cb, (gpointer)tethering);
 		break;
 
 	case TETHERING_TYPE_ALL:
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_USB_TETHER_OFF,
-				G_CALLBACK(__handle_usb_tether_off),
-				(gpointer)tethering);
-		org_tizen_tethering_disable_usb_tethering_async(proxy,
-				__disabled_cfm_cb, (gpointer)tethering);
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_USB_TETHER_OFF].sig_id);
 
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_WIFI_TETHER_OFF,
-				G_CALLBACK(__handle_wifi_tether_off),
-				(gpointer)tethering);
-		org_tizen_tethering_disable_wifi_tethering_async(proxy,
-				__disabled_cfm_cb, (gpointer)tethering);
+		g_dbus_proxy_call(proxy, "disable_usb_tethering",
+				NULL, G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __disabled_cfm_cb, (gpointer)tethering);
 
-		dbus_g_proxy_disconnect_signal(proxy, SIGNAL_NAME_BT_TETHER_OFF,
-				G_CALLBACK(__handle_bt_tether_off),
-				(gpointer)tethering);
-		org_tizen_tethering_disable_bt_tethering_async(proxy,
-				__disabled_cfm_cb, (gpointer)tethering);
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_WIFI_TETHER_OFF].sig_id);
+
+		g_dbus_proxy_call(proxy, "disable_wifi_tethering",
+				NULL, G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __disabled_cfm_cb, (gpointer)tethering);
+
+		g_dbus_connection_signal_unsubscribe(connection,
+				sigs[E_SIGNAL_BT_TETHER_OFF].sig_id);
+
+		g_dbus_proxy_call(proxy, "disable_bt_tethering",
+				NULL, G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+				(GAsyncReadyCallback) __disabled_cfm_cb, (gpointer)tethering);
 		break;
 
 	default :
 		ERR("Not supported tethering type [%d]\n", type);
+		DBG("-\n");
 		return TETHERING_ERROR_INVALID_PARAMETER;
-		break;
 	}
-
+	DBG("-\n");
 	return TETHERING_ERROR_NONE;
 }
 
@@ -1780,6 +1875,8 @@ API bool tethering_is_enabled(tethering_h tethering, tethering_type_e type)
 {
 	int is_on = 0;
 	int vconf_type = VCONFKEY_MOBILE_HOTSPOT_MODE_NONE;
+
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
 
 	if (vconf_get_int(VCONFKEY_MOBILE_HOTSPOT_MODE, &is_on) != 0) {
 		return FALSE;
@@ -1806,7 +1903,6 @@ API bool tethering_is_enabled(tethering_h tethering, tethering_type_e type)
 		ERR("Not supported type : %d\n", type);
 		break;
 	}
-
 	return is_on & vconf_type ? true : false;
 }
 
@@ -1832,13 +1928,17 @@ API bool tethering_is_enabled(tethering_h tethering, tethering_type_e type)
  */
 API int tethering_get_mac_address(tethering_h tethering, tethering_type_e type, char **mac_address)
 {
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
+	_retvm_if(tethering_is_enabled(tethering, type) == false,
+			TETHERING_ERROR_NOT_ENABLED,
+			"tethering type[%d] is not enabled\n", type);
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(mac_address == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(mac_address) is NULL\n");
-	_retvm_if(tethering_is_enabled(tethering, type) == false,
-			TETHERING_ERROR_NOT_ENABLED,
-			"tethering type[%d] is not enabled\n", type);
 
 	struct ifreq ifr;
 	int s = 0;
@@ -1896,13 +1996,17 @@ API int tethering_get_mac_address(tethering_h tethering, tethering_type_e type, 
  */
 API int tethering_get_network_interface_name(tethering_h tethering, tethering_type_e type, char **interface_name)
 {
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
+	_retvm_if(tethering_is_enabled(tethering, type) == false,
+			TETHERING_ERROR_NOT_ENABLED,
+			"tethering type[%d] is not enabled\n", type);
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(interface_name == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(interface_name) is NULL\n");
-	_retvm_if(tethering_is_enabled(tethering, type) == false,
-			TETHERING_ERROR_NOT_ENABLED,
-			"tethering type[%d] is not enabled\n", type);
 
 	char intf[TETHERING_STR_INFO_LEN] = {0, };
 
@@ -1939,13 +2043,18 @@ API int tethering_get_network_interface_name(tethering_h tethering, tethering_ty
  */
 API int tethering_get_ip_address(tethering_h tethering, tethering_type_e type, tethering_address_family_e address_family, char **ip_address)
 {
+
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
+	_retvm_if(tethering_is_enabled(tethering, type) == false,
+			TETHERING_ERROR_NOT_ENABLED,
+			"tethering type[%d] is not enabled\n", type);
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(ip_address == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(ip_address) is NULL\n");
-	_retvm_if(tethering_is_enabled(tethering, type) == false,
-			TETHERING_ERROR_NOT_ENABLED,
-			"tethering type[%d] is not enabled\n", type);
 
 	struct ifreq ifr;
 	int s = 0;
@@ -1996,13 +2105,18 @@ API int tethering_get_ip_address(tethering_h tethering, tethering_type_e type, t
  */
 API int tethering_get_gateway_address(tethering_h tethering, tethering_type_e type, tethering_address_family_e address_family, char **gateway_address)
 {
+
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
+	_retvm_if(tethering_is_enabled(tethering, type) == false,
+			TETHERING_ERROR_NOT_ENABLED,
+			"tethering type[%d] is not enabled\n", type);
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(gateway_address == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(gateway_address) is NULL\n");
-	_retvm_if(tethering_is_enabled(tethering, type) == false,
-			TETHERING_ERROR_NOT_ENABLED,
-			"tethering type[%d] is not enabled\n", type);
 
 	char gateway_buf[TETHERING_STR_INFO_LEN] = {0, };
 
@@ -2038,11 +2152,15 @@ API int tethering_get_gateway_address(tethering_h tethering, tethering_type_e ty
  */
 API int tethering_get_subnet_mask(tethering_h tethering, tethering_type_e type, tethering_address_family_e address_family, char **subnet_mask)
 {
-	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
-			"parameter(tethering) is NULL\n");
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
 	_retvm_if(tethering_is_enabled(tethering, type) == false,
 			TETHERING_ERROR_NOT_ENABLED,
 			"tethering is not enabled\n");
+	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
+			"parameter(tethering) is NULL\n");
 	_retvm_if(subnet_mask == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(subnet_mask) is NULL\n");
 
@@ -2072,6 +2190,8 @@ API int tethering_get_subnet_mask(tethering_h tethering, tethering_type_e type, 
  */
 API int tethering_get_data_usage(tethering_h tethering, tethering_data_usage_cb callback, void *user_data)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(callback == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2081,20 +2201,21 @@ API int tethering_get_data_usage(tethering_h tethering, tethering_data_usage_cb 
 			"tethering is not enabled\n");
 
 	__tethering_h *th = (__tethering_h *)tethering;
-	DBusGProxy *proxy = th->client_bus_proxy;
+	GDBusProxy *proxy = th->client_bus_proxy;
 
 	th->data_usage_cb = callback;
 	th->data_usage_user_data = user_data;
 
-	org_tizen_tethering_get_data_packet_usage_async(proxy,
-			__get_data_usage_cb, (gpointer)th);
+	g_dbus_proxy_call(proxy, "get_data_packet_usage",
+			NULL, G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+			(GAsyncReadyCallback) __get_data_usage_cb, (gpointer)tethering);
 
 	return TETHERING_ERROR_NONE;
 }
 
 /**
  * @internal
- * @brief Gets the client which is connected by USB tethering.
+ * @brief Gets the client which is connected by tethering "type".
  * @since_tizen 2.3
  * @privlevel platform
  * @privilege http://tizen.org/privilege/tethering.admin
@@ -2112,6 +2233,11 @@ API int tethering_get_data_usage(tethering_h tethering, tethering_data_usage_cb 
  */
 API int tethering_foreach_connected_clients(tethering_h tethering, tethering_type_e type, tethering_connected_client_cb callback, void *user_data)
 {
+	DBG("+\n");
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(callback == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2120,71 +2246,95 @@ API int tethering_foreach_connected_clients(tethering_h tethering, tethering_typ
 			TETHERING_ERROR_NOT_ENABLED,
 			"tethering is not enabled\n");
 
+	mobile_ap_type_e interface;
 	__tethering_h *th = (__tethering_h *)tethering;
 	__tethering_client_h client = {0, };
-
-	guint event = 0;
-	GPtrArray *array = NULL;
-	GValue value = {0, {{0}}};
-	GError *error = NULL;
-	int i = 0;
-	int no_of_client = 0;
-	guint interface = 0;
 	gchar *ip = NULL;
 	gchar *mac = NULL;
 	gchar *hostname = NULL;
 	guint timestamp = 0;
+	GError *error = NULL;
+	GVariant *result = NULL;
+	GVariantIter *outer_iter = NULL;
+	GVariantIter *inner_iter = NULL;
+	GVariant *station = NULL;
+	GVariant *value = NULL;
+	gchar *key = NULL;
 
-	org_tizen_tethering_get_station_info(th->client_bus_proxy, &event,
-			&array, &error);
-	if (error != NULL) {
-		ERR("DBus fail : %s\n", error->message);
-		g_error_free(error);
-		return TETHERING_ERROR_OPERATION_FAILED;
+	result = g_dbus_proxy_call_sync(th->client_bus_proxy, "get_station_info",
+			NULL, G_DBUS_CALL_FLAGS_NONE,
+			-1, th->cancellable, &error);
+	if (error) {
+		ERR("g_dbus_proxy_call_sync is failed and error is %s\n", error->message);
 	}
-
-	g_value_init(&value, DBUS_STRUCT_STATIONS);
-	no_of_client = array->len;
-	for (i = 0; i < no_of_client; i++) {
-		g_value_set_boxed(&value, g_ptr_array_index(array, i));
-
-		dbus_g_type_struct_get(&value, 0, &interface, 1, &ip,
-				2, &mac, 3, &hostname, 4, &timestamp, G_MAXUINT);
-
-		if (interface == MOBILE_AP_TYPE_USB)
-			client.interface = TETHERING_TYPE_USB;
-		else if (interface == MOBILE_AP_TYPE_WIFI)
-			client.interface = TETHERING_TYPE_WIFI;
-		else if (interface == MOBILE_AP_TYPE_BT)
-			client.interface = TETHERING_TYPE_BT;
-		else if (interface == MOBILE_AP_TYPE_WIFI_AP)
-			client.interface = TETHERING_TYPE_RESERVED;
-
-		if (client.interface != type && (TETHERING_TYPE_ALL != type &&
-					client.interface != TETHERING_TYPE_RESERVED))
-			continue;
-
-		g_strlcpy(client.ip, ip, sizeof(client.ip));
-		g_strlcpy(client.mac, mac, sizeof(client.mac));
-		if (hostname)
-			client.hostname = g_strdup(hostname);
-		client.tm = (time_t)timestamp;
-
+	g_variant_get(result, "(a(a{sv}))", &outer_iter);
+	while (g_variant_iter_loop(outer_iter, "(@a{sv})", &station)) {
+		g_variant_get(station, "a{sv}", &inner_iter);
+		while (g_variant_iter_loop(inner_iter, "{sv}", &key, &value)) {
+			if (g_strcmp0(key, "Type") == 0) {
+				interface = g_variant_get_int32(value);
+				if (interface == MOBILE_AP_TYPE_USB)
+					client.interface = TETHERING_TYPE_USB;
+				else if (interface == MOBILE_AP_TYPE_WIFI)
+					client.interface = TETHERING_TYPE_WIFI;
+				else if (interface == MOBILE_AP_TYPE_BT)
+					client.interface = TETHERING_TYPE_BT;
+				else if (interface == MOBILE_AP_TYPE_WIFI_AP)
+					client.interface = TETHERING_TYPE_RESERVED;
+				else {
+					ERR("Invalid interface\n");
+					g_free(key);
+					g_variant_unref(value);
+					break;
+				}
+				DBG("interface is %d\n", client.interface);
+				if (client.interface != type && (TETHERING_TYPE_ALL != type &&
+							client.interface != TETHERING_TYPE_RESERVED)) {
+					g_free(key);
+					g_variant_unref(value);
+					break;
+				}
+			} else if (g_strcmp0(key, "IP") == 0) {
+				g_variant_get(value, "s", &ip);
+				SDBG("ip is %s\n", ip);
+				g_strlcpy(client.ip, ip, sizeof(client.ip));
+			} else if (g_strcmp0(key, "MAC") == 0) {
+				g_variant_get(value, "s", &mac);
+				SDBG("mac is %s\n", mac);
+				g_strlcpy(client.mac, mac, sizeof(client.mac));
+			} else if (g_strcmp0(key, "Name") == 0) {
+				g_variant_get(value, "s", &hostname);
+				SDBG("hsotname is %s\n", hostname);
+				if (hostname) {
+					client.hostname = g_strdup(hostname);
+				}
+			} else if (g_strcmp0(key, "Time") == 0) {
+				timestamp = g_variant_get_int32(value);
+				DBG("timestamp is %d\n", timestamp);
+				client.tm = (time_t)timestamp;
+			} else {
+				ERR("Key %s not required\n", key);
+			}
+		}
+		g_free(hostname);
 		g_free(ip);
 		g_free(mac);
-		g_free(hostname);
-
+		g_variant_iter_free(inner_iter);
 		if (callback((tethering_client_h)&client, user_data) == false) {
 			DBG("iteration is stopped\n");
 			g_free(client.hostname);
-			return TETHERING_ERROR_NONE;
+			g_variant_iter_free(outer_iter);
+			g_variant_unref(station);
+			g_variant_unref(result);
+			DBG("-\n");
+			return TETHERING_ERROR_OPERATION_FAILED;
 		}
 		g_free(client.hostname);
 	}
-
-	if (array->len > 0)
-		g_ptr_array_free(array, TRUE);
-
+	g_variant_iter_free(outer_iter);
+	g_variant_unref(station);
+	g_variant_unref(result);
+	DBG("-\n");
 	return TETHERING_ERROR_NONE;
 }
 
@@ -2204,6 +2354,10 @@ API int tethering_foreach_connected_clients(tethering_h tethering, tethering_typ
  */
 API int tethering_set_enabled_cb(tethering_h tethering, tethering_type_e type, tethering_enabled_cb callback, void *user_data)
 {
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(callback == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2242,6 +2396,10 @@ API int tethering_set_enabled_cb(tethering_h tethering, tethering_type_e type, t
  */
 API int tethering_unset_enabled_cb(tethering_h tethering, tethering_type_e type)
 {
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 
@@ -2280,6 +2438,10 @@ API int tethering_unset_enabled_cb(tethering_h tethering, tethering_type_e type)
  */
 API int tethering_set_disabled_cb(tethering_h tethering, tethering_type_e type, tethering_disabled_cb callback, void *user_data)
 {
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(callback == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2318,6 +2480,10 @@ API int tethering_set_disabled_cb(tethering_h tethering, tethering_type_e type, 
  */
 API int tethering_unset_disabled_cb(tethering_h tethering, tethering_type_e type)
 {
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 
@@ -2356,6 +2522,10 @@ API int tethering_unset_disabled_cb(tethering_h tethering, tethering_type_e type
  */
 API int tethering_set_connection_state_changed_cb(tethering_h tethering, tethering_type_e type, tethering_connection_state_changed_cb callback, void *user_data)
 {
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(callback == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2394,6 +2564,10 @@ API int tethering_set_connection_state_changed_cb(tethering_h tethering, tetheri
  */
 API int tethering_unset_connection_state_changed_cb(tethering_h tethering, tethering_type_e type)
 {
+	if (type == TETHERING_TYPE_USB) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_USB_FEATURE);
+	else if (type == TETHERING_TYPE_WIFI) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+	else if (type == TETHERING_TYPE_BT) CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_BT_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 
@@ -2431,6 +2605,8 @@ API int tethering_unset_connection_state_changed_cb(tethering_h tethering, tethe
  */
 API int tethering_wifi_set_security_type_changed_cb(tethering_h tethering, tethering_wifi_security_type_changed_cb callback, void *user_data)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(callback == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2459,6 +2635,8 @@ API int tethering_wifi_set_security_type_changed_cb(tethering_h tethering, tethe
  */
 API int tethering_wifi_unset_security_type_changed_cb(tethering_h tethering)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 
@@ -2485,6 +2663,8 @@ API int tethering_wifi_unset_security_type_changed_cb(tethering_h tethering)
  */
 API int tethering_wifi_set_ssid_visibility_changed_cb(tethering_h tethering, tethering_wifi_ssid_visibility_changed_cb callback, void *user_data)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(callback == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2511,6 +2691,8 @@ API int tethering_wifi_set_ssid_visibility_changed_cb(tethering_h tethering, tet
  */
 API int tethering_wifi_unset_ssid_visibility_changed_cb(tethering_h tethering)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 
@@ -2537,6 +2719,8 @@ API int tethering_wifi_unset_ssid_visibility_changed_cb(tethering_h tethering)
  */
 API int tethering_wifi_set_passphrase_changed_cb(tethering_h tethering, tethering_wifi_passphrase_changed_cb callback, void *user_data)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(callback == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2563,6 +2747,8 @@ API int tethering_wifi_set_passphrase_changed_cb(tethering_h tethering, tetherin
  */
 API int tethering_wifi_unset_passphrase_changed_cb(tethering_h tethering)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 
@@ -2591,6 +2777,8 @@ API int tethering_wifi_unset_passphrase_changed_cb(tethering_h tethering)
  */
 API int tethering_wifi_set_security_type(tethering_h tethering, tethering_wifi_security_type_e type)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 
@@ -2599,13 +2787,13 @@ API int tethering_wifi_set_security_type(tethering_h tethering, tethering_wifi_s
 
 	ret = __set_security_type(type);
 	if (ret == TETHERING_ERROR_NONE) {
-		__send_dbus_signal(th->client_bus_connection,
+
+		__send_dbus_signal(th->client_bus,
 				SIGNAL_NAME_SECURITY_TYPE_CHANGED,
 				type == TETHERING_WIFI_SECURITY_TYPE_NONE ?
 				TETHERING_WIFI_SECURITY_TYPE_OPEN_STR :
 				TETHERING_WIFI_SECURITY_TYPE_WPA2_PSK_STR);
 	}
-
 	return ret;
 }
 
@@ -2625,6 +2813,8 @@ API int tethering_wifi_set_security_type(tethering_h tethering, tethering_wifi_s
  */
 API int tethering_wifi_get_security_type(tethering_h tethering, tethering_wifi_security_type_e *type)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(type == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(type) is NULL\n");
 
@@ -2648,6 +2838,8 @@ API int tethering_wifi_get_security_type(tethering_h tethering, tethering_wifi_s
  */
 API int tethering_wifi_set_ssid(tethering_h tethering, const char *ssid)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(ssid == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2691,6 +2883,8 @@ API int tethering_wifi_set_ssid(tethering_h tethering, const char *ssid)
  */
 API int tethering_wifi_get_ssid(tethering_h tethering, char **ssid)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(ssid == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2745,6 +2939,8 @@ API int tethering_wifi_get_ssid(tethering_h tethering, char **ssid)
  */
 API int tethering_wifi_set_ssid_visibility(tethering_h tethering, bool visible)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 
@@ -2753,12 +2949,12 @@ API int tethering_wifi_set_ssid_visibility(tethering_h tethering, bool visible)
 
 	ret = __set_visible(visible);
 	if (ret == TETHERING_ERROR_NONE) {
-		__send_dbus_signal(th->client_bus_connection,
+
+		__send_dbus_signal(th->client_bus,
 				SIGNAL_NAME_SSID_VISIBILITY_CHANGED,
 				visible ? SIGNAL_MSG_SSID_VISIBLE :
 				SIGNAL_MSG_SSID_HIDE);
 	}
-
 	return ret;
 }
 
@@ -2779,6 +2975,8 @@ API int tethering_wifi_set_ssid_visibility(tethering_h tethering, bool visible)
  */
 API int tethering_wifi_get_ssid_visibility(tethering_h tethering, bool *visible)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(visible == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(visible) is NULL\n");
 
@@ -2802,6 +3000,8 @@ API int tethering_wifi_get_ssid_visibility(tethering_h tethering, bool *visible)
  */
 API int tethering_wifi_set_passphrase(tethering_h tethering, const char *passphrase)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(passphrase == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2829,10 +3029,9 @@ API int tethering_wifi_set_passphrase(tethering_h tethering, const char *passphr
 
 	ret = __set_passphrase(passphrase, passphrase_len);
 	if (ret == TETHERING_ERROR_NONE) {
-		__send_dbus_signal(th->client_bus_connection,
+		__send_dbus_signal(th->client_bus,
 				SIGNAL_NAME_PASSPHRASE_CHANGED, NULL);
 	}
-
 	return ret;
 }
 
@@ -2854,6 +3053,8 @@ API int tethering_wifi_set_passphrase(tethering_h tethering, const char *passphr
  */
 API int tethering_wifi_get_passphrase(tethering_h tethering, char **passphrase)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(passphrase == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2894,6 +3095,8 @@ API int tethering_wifi_get_passphrase(tethering_h tethering, char **passphrase)
 API int tethering_wifi_reload_settings(tethering_h tethering, tethering_wifi_settings_reloaded_cb callback, void *user_data)
 
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(callback == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -2901,7 +3104,7 @@ API int tethering_wifi_reload_settings(tethering_h tethering, tethering_wifi_set
 
 	__tethering_h *th = (__tethering_h *)tethering;
 	_softap_settings_t set = {"", "", 0, false};
-	DBusGProxy *proxy = th->client_bus_proxy;
+	GDBusProxy *proxy = th->client_bus_proxy;
 	int ret = 0;
 
 	DBG("+\n");
@@ -2920,9 +3123,10 @@ API int tethering_wifi_reload_settings(tethering_h tethering, tethering_wifi_set
 	th->settings_reloaded_cb = callback;
 	th->settings_reloaded_user_data = user_data;
 
-	org_tizen_tethering_reload_wifi_settings_async(proxy,
-				set.ssid, set.key, set.visibility, set.sec_type,
-				__settings_reloaded_cb, (gpointer)tethering);
+	g_dbus_proxy_call(proxy, "reload_wifi_settings",
+			g_variant_new("(ssii)", set.ssid, set.key, set.visibility, set.sec_type),
+			G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+			(GAsyncReadyCallback) __settings_reloaded_cb, (gpointer)tethering);
 
 	return TETHERING_ERROR_NONE;
 }
@@ -2944,6 +3148,8 @@ API int tethering_wifi_reload_settings(tethering_h tethering, tethering_wifi_set
  */
 API int tethering_wifi_ap_set_security_type(tethering_h tethering, tethering_wifi_security_type_e type)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 		"parameter(tethering) is NULL\n");
 
@@ -2968,6 +3174,8 @@ API int tethering_wifi_ap_set_security_type(tethering_h tethering, tethering_wif
  */
 API int tethering_wifi_ap_get_security_type(tethering_h tethering, tethering_wifi_security_type_e *type)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(type == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 		"parameter(type) is NULL\n");
 
@@ -2993,6 +3201,8 @@ API int tethering_wifi_ap_get_security_type(tethering_h tethering, tethering_wif
  */
 API int tethering_wifi_ap_set_ssid(tethering_h tethering, const char *ssid)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(ssid == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -3038,6 +3248,8 @@ API int tethering_wifi_ap_set_ssid(tethering_h tethering, const char *ssid)
  */
 API int tethering_wifi_ap_get_ssid(tethering_h tethering, char **ssid)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(ssid == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -3073,6 +3285,8 @@ API int tethering_wifi_ap_get_ssid(tethering_h tethering, char **ssid)
  */
 API int tethering_wifi_ap_set_ssid_visibility(tethering_h tethering, bool visible)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 		"parameter(tethering) is NULL\n");
 
@@ -3098,6 +3312,8 @@ API int tethering_wifi_ap_set_ssid_visibility(tethering_h tethering, bool visibl
  */
 API int tethering_wifi_ap_get_ssid_visibility(tethering_h tethering, bool *visible)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(visible == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(visible) is NULL\n");
 
@@ -3123,6 +3339,8 @@ API int tethering_wifi_ap_get_ssid_visibility(tethering_h tethering, bool *visib
  */
 API int tethering_wifi_ap_set_passphrase(tethering_h tethering, const char *passphrase)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 		"parameter(tethering) is NULL\n");
 	_retvm_if(passphrase == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -3164,6 +3382,8 @@ API int tethering_wifi_ap_set_passphrase(tethering_h tethering, const char *pass
  */
 API int tethering_wifi_ap_get_passphrase(tethering_h tethering, char **passphrase)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(passphrase == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -3198,6 +3418,8 @@ API int tethering_wifi_ap_get_passphrase(tethering_h tethering, char **passphras
 API int tethering_wifi_ap_reload_settings(tethering_h tethering, tethering_wifi_ap_settings_reloaded_cb callback, void *user_data)
 
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE, TETHERING_WIFI_FEATURE);
+
 	_retvm_if(tethering == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"parameter(tethering) is NULL\n");
 	_retvm_if(callback == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -3205,7 +3427,7 @@ API int tethering_wifi_ap_reload_settings(tethering_h tethering, tethering_wifi_
 
 	__tethering_h *th = (__tethering_h *)tethering;
 	_softap_settings_t set = {"", "", 0, false};
-	DBusGProxy *proxy = th->client_bus_proxy;
+	GDBusProxy *proxy = th->client_bus_proxy;
 	int ret = 0;
 
 	DBG("+\n");
@@ -3224,9 +3446,10 @@ API int tethering_wifi_ap_reload_settings(tethering_h tethering, tethering_wifi_
 	th->ap_settings_reloaded_cb = callback;
 	th->ap_settings_reloaded_user_data = user_data;
 
-	org_tizen_tethering_reload_wifi_ap_settings_async(proxy,
-			set.ssid, set.key, set.visibility, set.sec_type,
-			__ap_settings_reloaded_cb, (gpointer)tethering);
+	g_dbus_proxy_call(proxy, "reload_wifi_ap_settings",
+			g_variant_new("(ssii)", set.ssid, set.key, set.visibility, set.sec_type),
+			G_DBUS_CALL_FLAGS_NONE, -1, th->cancellable,
+			(GAsyncReadyCallback) __ap_settings_reloaded_cb, (gpointer)tethering);
 
 	return TETHERING_ERROR_NONE;
 }

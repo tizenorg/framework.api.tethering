@@ -1,18 +1,19 @@
 Name:		capi-network-tethering
 Summary:	Tethering Framework
-Version:	1.0.16
+Version:	1.0.19
 Release:	1
 Group:		System/Network
 License:	Apache-2.0
 Source0:	%{name}-%{version}.tar.gz
 BuildRequires:	pkgconfig(dlog)
 BuildRequires:	pkgconfig(dbus-1)
-BuildRequires:	pkgconfig(dbus-glib-1)
 BuildRequires:	pkgconfig(capi-base-common)
 BuildRequires:	pkgconfig(glib-2.0)
+BuildRequires:	pkgconfig(gio-2.0)
 BuildRequires:	pkgconfig(vconf)
 BuildRequires:	pkgconfig(secure-storage)
 BuildRequires:	pkgconfig(libssl)
+BuildRequires:	pkgconfig(capi-system-info)
 BuildRequires:	cmake
 Requires(post):		/sbin/ldconfig
 Requires(postun):	/sbin/ldconfig
@@ -39,8 +40,10 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 %cmake -DCMAKE_BUILD_TYPE="Private" \
 %if "%{?tizen_profile_name}" == "wearable"
 	-DTIZEN_WEARABLE=1 \
-%elseif "%{?tizen_profile_name}" == "mobile"
+%else
+%if "%{?tizen_profile_name}" == "mobile"
 	-DTIZEN_MOBILE=1 \
+%endif
 %endif
 %ifarch %{arm}
 	-DCMAKE_BUILD_TYPE="Private" -DARCH=arm \

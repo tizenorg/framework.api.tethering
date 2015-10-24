@@ -20,6 +20,8 @@
 
 API int tethering_client_clone(tethering_client_h *dest, tethering_client_h origin)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
+
 	_retvm_if(dest == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(dest) is NULL\n");
 
@@ -49,6 +51,8 @@ API int tethering_client_clone(tethering_client_h *dest, tethering_client_h orig
 
 API int tethering_client_destroy(tethering_client_h client)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
+
 	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(client) is NULL\n");
 
@@ -65,6 +69,8 @@ API int tethering_client_destroy(tethering_client_h client)
 
 API int tethering_client_get_tethering_type(tethering_client_h client, tethering_type_e *type)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
+
 	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(client) is NULL\n");
 	_retvm_if(type == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -79,6 +85,8 @@ API int tethering_client_get_tethering_type(tethering_client_h client, tethering
 
 API int tethering_client_get_name(tethering_client_h client, char **name)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
+
 	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(client) is NULL\n");
 	_retvm_if(name == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -97,6 +105,8 @@ API int tethering_client_get_name(tethering_client_h client, char **name)
 
 API int tethering_client_get_ip_address(tethering_client_h client, tethering_address_family_e address_family, char **ip_address)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
+
 	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(client) is NULL\n");
 	_retvm_if(ip_address == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -115,6 +125,8 @@ API int tethering_client_get_ip_address(tethering_client_h client, tethering_add
 
 API int tethering_client_get_mac_address(tethering_client_h client, char **mac_address)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
+
 	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(client) is NULL\n");
 	_retvm_if(mac_address == NULL, TETHERING_ERROR_INVALID_PARAMETER,
@@ -133,9 +145,10 @@ API int tethering_client_get_mac_address(tethering_client_h client, char **mac_a
 
 API int tethering_client_get_time(tethering_client_h client, time_t *timestamp)
 {
+	CHECK_FEATURE_SUPPORTED(TETHERING_FEATURE);
+
 	_retvm_if(client == NULL, TETHERING_ERROR_INVALID_PARAMETER,
 			"Parameter(client) is NULL\n");
-
 
 	__tethering_client_h *si = (__tethering_client_h *)client;
 
